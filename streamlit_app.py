@@ -1,3 +1,10 @@
+"""
+TechLogistics S.A.S. - Sistema de Soporte a la Decisión (DSS)
+Dashboard Streamlit para Análisis de Datos
+Autor: [Tu Nombre]
+Universidad EAFIT - 2026-1
+"""
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -68,69 +75,41 @@ st.markdown("""
         border-left: 4px solid #2C5F2D;
         margin: 1rem 0;
     }
+    .upload-section {
+        background-color: #F0F2F6;
+        padding: 2rem;
+        border-radius: 10px;
+        border: 2px dashed #1E2761;
+        margin: 1rem 0;
+    }
     </style>
     """, unsafe_allow_html=True)
 
 # ================================
 # FUNCIONES DE CARGA DE DATOS
 # ================================
-@st.cache_data
-def load_data():
+def load_uploaded_file(uploaded_file):
     """
-    Carga los datasets limpios.
-    INSTRUCCIONES: Coloca tus archivos CSV limpios en la carpeta 'data/'
-    con los nombres: inventario_clean.csv, transacciones_clean.csv, feedback_clean.csv
+    Carga un archivo CSV subido por el usuario
     """
-    try:
-        inventario = pd.read_csv('data/inventario_clean.csv')
-        transacciones = pd.read_csv('data/transacciones_clean.csv')
-        feedback = pd.read_csv('data/feedback_clean.csv')
-        
-        # Convertir columnas de fecha si existen
-        date_columns_inv = ['Ultima_Revision', 'Fecha_Registro']
-        date_columns_trans = ['Fecha_Venta', 'Fecha_Entrega']
-        
-        for col in date_columns_inv:
-            if col in inventario.columns:
-                inventario[col] = pd.to_datetime(inventario[col], errors='coerce')
-        
-        for col in date_columns_trans:
-            if col in transacciones.columns:
-                transacciones[col] = pd.to_datetime(transacciones[col], errors='coerce')
-        
-        return inventario, transacciones, feedback
-    except FileNotFoundError as e:
-        st.error(f"""
-        ❌ Error al cargar los datos: {e}
-        
-        **Instrucciones:**
-        1. Crea la carpeta `data/` en el directorio del proyecto
-        2. Coloca tus archivos CSV limpios con los nombres:
-           - inventario_clean.csv
-           - transacciones_clean.csv
-           - feedback_clean.csv
-        """)
-        st.stop()
+    if uploaded_file is not None:
+        try:
+            df = pd.read_csv(uploaded_file)
+            return df
+        except Exception as e:
+            st.error(f"Error al cargar el archivo: {e}")
+            return None
+    return None
 
-@st.cache_data
-def load_integrated_data():
+def process_dates(df, date_columns):
     """
-    Carga el dataset integrado (después del merge).
-    INSTRUCCIONES: Coloca tu archivo integrado en 'data/data_integrated.csv'
+    Convierte columnas de fecha al formato datetime
     """
-    try:
-        integrated = pd.read_csv('data/data_integrated.csv')
-        
-        # Convertir fechas
-        date_columns = ['Fecha_Venta', 'Fecha_Entrega', 'Ultima_Revision']
-        for col in date_columns:
-            if col in integrated.columns:
-                integrated[col] = pd.to_datetime(integrated[col], errors='coerce')
-        
-        return integrated
-    except FileNotFoundError:
-        st.warning("⚠️ Archivo integrado no encontrado. Usando datos separados.")
-        return None
+    df_copy = df.copy()
+    for col in date_columns:
+        if col in df_copy.columns:
+            df_copy[col] = pd.to_datetime(df_copy[col], errors='coerce')
+    return df_copy
 
 # ================================
 # FUNCIONES DE ANÁLISIS
@@ -199,23 +178,103 @@ def filter_data(df, filters):
     return filtered_df
 
 # ================================
-# CARGA DE DATOS
-# ================================
-inventario, transacciones, feedback = load_data()
-data_integrated = load_integrated_data()
-
-# Usar datos integrados si existen, sino usar separados
-if data_integrated is not None:
-    main_data = data_integrated
-else:
-    # Crear un merge básico si no existe el integrado
-    main_data = transacciones.merge(inventario, on='SKU', how='left')
-    main_data = main_data.merge(feedback, on='ID_Transaccion', how='left')
-
-# ================================
 # HEADER
 # ================================
 st.markdown('<div class="main-header">🚀 TechLogistics S.A.S. - Sistema de Soporte a la Decisión</div>', unsafe_allow_html=True)
+
+# ================================
+# SECCIÓN DE CARGA DE ARCHIVOS
+# ================================
+st.markdown('<div class="upload-section">', unsafe_allow_html=True)
+st.header("📂 Carga de Datos")
+
+st.markdown("""
+**Instrucciones:** Sube tus archivos CSV limpios en el siguiente orden. 
+Los archivos deben contener las columnas esperadas para el análisis.
+""")
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.subheader("📦 Inventario")
+    inventario_file = st.file_uploader(
+        "Sube el archivo de inventario",
+        type=['csv'],
+        key='inventario',
+        help="Debe contener columnas como: SKU, Categoria, Existencias, Costo_Unitario, etc."
+    )
+
+with col2:
+    st.subheader("🚚 Transacciones")
+    transacciones_file = st.file_uploader(
+        "Sube el archivo de transacciones",
+        type=['csv'],
+        key='transacciones',
+        help="Debe contener columnas como: ID_Transaccion, SKU, Fecha_Venta, Precio_Venta, etc."
+    )
+
+with col3:
+    st.subheader("💬 Feedback")
+    feedback_file = st.file_uploader(
+        "Sube el archivo de feedback",
+        type=['csv'],
+        key='feedback',
+        help="Debe contener columnas como: ID_Transaccion, NPS, Comentarios, etc."
+    )
+
+st.markdown('</div>', unsafe_allow_html=True)
+
+# Cargar los archivos
+inventario = load_uploaded_file(inventario_file)
+transacciones = load_uploaded_file(transacciones_file)
+feedback = load_uploaded_file(feedback_file)
+
+# Verificar que al menos un archivo fue cargado
+if inventario is None and transacciones is None and feedback is None:
+    st.warning("⚠️ Por favor, sube al menos un archivo CSV para comenzar el análisis.")
+    st.stop()
+
+# Procesar fechas si los archivos fueron cargados
+if inventario is not None:
+    inventario = process_dates(inventario, ['Ultima_Revision', 'Fecha_Registro'])
+    st.success(f"✅ Inventario cargado: {len(inventario)} registros")
+
+if transacciones is not None:
+    transacciones = process_dates(transacciones, ['Fecha_Venta', 'Fecha_Entrega'])
+    st.success(f"✅ Transacciones cargadas: {len(transacciones)} registros")
+
+if feedback is not None:
+    feedback = process_dates(feedback, ['Fecha_Feedback'])
+    st.success(f"✅ Feedback cargado: {len(feedback)} registros")
+
+st.markdown("---")
+
+# Crear dataset integrado si hay datos disponibles
+main_data = None
+
+if transacciones is not None and inventario is not None and feedback is not None:
+    # Merge completo
+    main_data = transacciones.merge(inventario, on='SKU', how='left', suffixes=('', '_inv'))
+    main_data = main_data.merge(feedback, on='ID_Transaccion', how='left', suffixes=('', '_feed'))
+    st.info(f"📊 Dataset integrado creado: {len(main_data)} registros")
+elif transacciones is not None and inventario is not None:
+    # Merge parcial (sin feedback)
+    main_data = transacciones.merge(inventario, on='SKU', how='left', suffixes=('', '_inv'))
+    st.info(f"📊 Dataset integrado creado (sin feedback): {len(main_data)} registros")
+elif transacciones is not None:
+    # Solo transacciones
+    main_data = transacciones
+    st.info(f"📊 Usando solo datos de transacciones: {len(main_data)} registros")
+elif inventario is not None:
+    # Solo inventario
+    main_data = inventario
+    st.info(f"📊 Usando solo datos de inventario: {len(main_data)} registros")
+
+# Si no hay datos integrados, usar el primer archivo disponible
+if main_data is None:
+    if feedback is not None:
+        main_data = feedback
+        st.info(f"📊 Usando solo datos de feedback: {len(main_data)} registros")
 
 # ================================
 # SIDEBAR
@@ -231,12 +290,17 @@ with st.sidebar:
         date_min = main_data['Fecha_Venta'].min()
         date_max = main_data['Fecha_Venta'].max()
         
-        date_range = st.date_input(
-            "Rango de Fechas",
-            value=(date_min, date_max),
-            min_value=date_min,
-            max_value=date_max
-        )
+        if pd.notna(date_min) and pd.notna(date_max):
+            date_range = st.date_input(
+                "Rango de Fechas",
+                value=(date_min, date_max),
+                min_value=date_min,
+                max_value=date_max
+            )
+        else:
+            date_range = None
+    else:
+        date_range = None
     
     # Filtro de Categorías
     if 'Categoria' in main_data.columns:
@@ -284,20 +348,25 @@ with st.sidebar:
     st.subheader("📥 Descargas")
     
     # Crear un reporte de calidad
-    quality_report = pd.DataFrame([
-        calculate_health_score(inventario, 'Inventario'),
-        calculate_health_score(transacciones, 'Transacciones'),
-        calculate_health_score(feedback, 'Feedback')
-    ])
+    quality_data = []
+    if inventario is not None:
+        quality_data.append(calculate_health_score(inventario, 'Inventario'))
+    if transacciones is not None:
+        quality_data.append(calculate_health_score(transacciones, 'Transacciones'))
+    if feedback is not None:
+        quality_data.append(calculate_health_score(feedback, 'Feedback'))
     
-    csv_quality = quality_report.to_csv(index=False).encode('utf-8')
-    
-    st.download_button(
-        label="📊 Reporte de Calidad",
-        data=csv_quality,
-        file_name=f"reporte_calidad_{datetime.now().strftime('%Y%m%d')}.csv",
-        mime="text/csv"
-    )
+    if quality_data:
+        quality_report = pd.DataFrame(quality_data)
+        
+        csv_quality = quality_report.to_csv(index=False).encode('utf-8')
+        
+        st.download_button(
+            label="📊 Reporte de Calidad",
+            data=csv_quality,
+            file_name=f"reporte_calidad_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv"
+        )
     
     # Aplicar filtros
     filters = {}
@@ -312,7 +381,7 @@ with st.sidebar:
     
     filtered_data = filter_data(main_data, filters)
     
-    if 'Fecha_Venta' in filtered_data.columns and len(date_range) == 2:
+    if 'Fecha_Venta' in filtered_data.columns and date_range is not None and len(date_range) == 2:
         filtered_data = filtered_data[
             (filtered_data['Fecha_Venta'] >= pd.to_datetime(date_range[0])) &
             (filtered_data['Fecha_Venta'] <= pd.to_datetime(date_range[1]))
@@ -354,109 +423,110 @@ with tab1:
     """)
     
     # KPIs de calidad
-    col1, col2, col3 = st.columns(3)
+    cols = []
+    health_scores = []
     
-    health_inv = calculate_health_score(inventario, 'Inventario')
-    health_trans = calculate_health_score(transacciones, 'Transacciones')
-    health_feed = calculate_health_score(feedback, 'Feedback')
+    if inventario is not None:
+        cols.append(st.columns(3)[0] if len(cols) == 0 else st.columns(3)[len(cols)])
+        health_scores.append(calculate_health_score(inventario, 'Inventario'))
     
-    with col1:
-        st.markdown('<div class="kpi-container">', unsafe_allow_html=True)
-        st.metric(
-            label="📦 Inventario",
-            value=f"{health_inv['health_score']}%",
-            delta=f"{health_inv['total_rows']:,} registros"
-        )
-        st.markdown('</div>', unsafe_allow_html=True)
+    if transacciones is not None:
+        if len(cols) == 0:
+            cols = st.columns(3)
+        health_scores.append(calculate_health_score(transacciones, 'Transacciones'))
     
-    with col2:
-        st.markdown('<div class="kpi-container">', unsafe_allow_html=True)
-        st.metric(
-            label="🚚 Transacciones",
-            value=f"{health_trans['health_score']}%",
-            delta=f"{health_trans['total_rows']:,} registros"
-        )
-        st.markdown('</div>', unsafe_allow_html=True)
+    if feedback is not None:
+        if len(cols) == 0:
+            cols = st.columns(3)
+        health_scores.append(calculate_health_score(feedback, 'Feedback'))
     
-    with col3:
-        st.markdown('<div class="kpi-container">', unsafe_allow_html=True)
-        st.metric(
-            label="💬 Feedback",
-            value=f"{health_feed['health_score']}%",
-            delta=f"{health_feed['total_rows']:,} registros"
-        )
-        st.markdown('</div>', unsafe_allow_html=True)
+    # Mostrar KPIs
+    col_layout = st.columns(len(health_scores))
+    
+    for idx, health in enumerate(health_scores):
+        with col_layout[idx]:
+            st.markdown('<div class="kpi-container">', unsafe_allow_html=True)
+            icon = "📦" if health['dataset'] == 'Inventario' else "🚚" if health['dataset'] == 'Transacciones' else "💬"
+            st.metric(
+                label=f"{icon} {health['dataset']}",
+                value=f"{health['health_score']}%",
+                delta=f"{health['total_rows']:,} registros"
+            )
+            st.markdown('</div>', unsafe_allow_html=True)
     
     st.markdown("---")
     
     # Gráficos de velocímetro
     st.subheader("🎯 Health Score por Dataset")
     
-    col1, col2, col3 = st.columns(3)
+    gauge_cols = st.columns(len(health_scores))
     
-    with col1:
-        fig_inv = create_health_gauge(health_inv['health_score'], "Inventario")
-        st.plotly_chart(fig_inv, use_container_width=True)
-    
-    with col2:
-        fig_trans = create_health_gauge(health_trans['health_score'], "Transacciones")
-        st.plotly_chart(fig_trans, use_container_width=True)
-    
-    with col3:
-        fig_feed = create_health_gauge(health_feed['health_score'], "Feedback")
-        st.plotly_chart(fig_feed, use_container_width=True)
+    for idx, health in enumerate(health_scores):
+        with gauge_cols[idx]:
+            fig = create_health_gauge(health['health_score'], health['dataset'])
+            st.plotly_chart(fig, use_container_width=True)
     
     st.markdown("---")
     
     # Tabla detallada de métricas
     st.subheader("📋 Métricas Detalladas de Calidad")
     
-    metrics_df = pd.DataFrame([health_inv, health_trans, health_feed])
-    metrics_df = metrics_df[[
-        'dataset', 'health_score', 'completeness', 'uniqueness',
-        'total_rows', 'missing_values', 'duplicates'
-    ]]
-    metrics_df.columns = [
-        'Dataset', 'Health Score (%)', 'Completitud (%)', 'Unicidad (%)',
-        'Total Registros', 'Valores Faltantes', 'Duplicados'
-    ]
-    
-    st.dataframe(metrics_df, use_container_width=True, hide_index=True)
+    if health_scores:
+        metrics_df = pd.DataFrame(health_scores)
+        metrics_df = metrics_df[[
+            'dataset', 'health_score', 'completeness', 'uniqueness',
+            'total_rows', 'missing_values', 'duplicates'
+        ]]
+        metrics_df.columns = [
+            'Dataset', 'Health Score (%)', 'Completitud (%)', 'Unicidad (%)',
+            'Total Registros', 'Valores Faltantes', 'Duplicados'
+        ]
+        
+        st.dataframe(metrics_df, use_container_width=True, hide_index=True)
     
     # Análisis de nulidad por columna
     st.markdown("---")
     st.subheader("🔍 Análisis de Valores Faltantes por Columna")
     
-    dataset_choice = st.selectbox(
-        "Selecciona el dataset a analizar:",
-        ["Inventario", "Transacciones", "Feedback"]
-    )
+    available_datasets = []
+    if inventario is not None:
+        available_datasets.append("Inventario")
+    if transacciones is not None:
+        available_datasets.append("Transacciones")
+    if feedback is not None:
+        available_datasets.append("Feedback")
     
-    if dataset_choice == "Inventario":
-        df_analysis = inventario
-    elif dataset_choice == "Transacciones":
-        df_analysis = transacciones
-    else:
-        df_analysis = feedback
-    
-    # Calcular porcentaje de nulos por columna
-    null_percent = (df_analysis.isnull().sum() / len(df_analysis) * 100).sort_values(ascending=False)
-    null_percent = null_percent[null_percent > 0]  # Solo columnas con nulos
-    
-    if len(null_percent) > 0:
-        fig_null = px.bar(
-            x=null_percent.values,
-            y=null_percent.index,
-            orientation='h',
-            labels={'x': 'Porcentaje de Valores Faltantes (%)', 'y': 'Columna'},
-            title=f"Valores Faltantes en {dataset_choice}",
-            color=null_percent.values,
-            color_continuous_scale='Reds'
+    if available_datasets:
+        dataset_choice = st.selectbox(
+            "Selecciona el dataset a analizar:",
+            available_datasets
         )
-        fig_null.update_layout(height=400, showlegend=False)
-        st.plotly_chart(fig_null, use_container_width=True)
-    else:
-        st.success(f"✅ ¡Excelente! El dataset {dataset_choice} no tiene valores faltantes.")
+        
+        if dataset_choice == "Inventario":
+            df_analysis = inventario
+        elif dataset_choice == "Transacciones":
+            df_analysis = transacciones
+        else:
+            df_analysis = feedback
+        
+        # Calcular porcentaje de nulos por columna
+        null_percent = (df_analysis.isnull().sum() / len(df_analysis) * 100).sort_values(ascending=False)
+        null_percent = null_percent[null_percent > 0]  # Solo columnas con nulos
+        
+        if len(null_percent) > 0:
+            fig_null = px.bar(
+                x=null_percent.values,
+                y=null_percent.index,
+                orientation='h',
+                labels={'x': 'Porcentaje de Valores Faltantes (%)', 'y': 'Columna'},
+                title=f"Valores Faltantes en {dataset_choice}",
+                color=null_percent.values,
+                color_continuous_scale='Reds'
+            )
+            fig_null.update_layout(height=400, showlegend=False)
+            st.plotly_chart(fig_null, use_container_width=True)
+        else:
+            st.success(f"✅ ¡Excelente! El dataset {dataset_choice} no tiene valores faltantes.")
     
     # Decisiones de limpieza documentadas
     st.markdown("---")
@@ -472,73 +542,38 @@ with tab1:
         <li>¿Cómo trataste los outliers?</li>
         <li>¿Qué decisión tomaste con los SKUs fantasma?</li>
     </ul>
-    <br>
-    Ejemplo de texto para incluir aquí:
     </div>
     """, unsafe_allow_html=True)
     
-    with st.expander("📄 Ver Documentación de Decisiones de Limpieza"):
+    with st.expander("📄 Ver Plantilla de Documentación"):
         st.markdown("""
-        ### Decisiones de Limpieza - Inventario
+        ### Decisiones de Limpieza - [Nombre del Dataset]
         
-        **1. Valores Atípicos en Costos:**
-        - Detectados 45 productos con costo < $1 y 12 productos con costo > $100,000
-        - **Decisión:** Eliminados registros con costo < $0.50 (probable error de sistema)
-        - **Justificación:** Productos con costo extremadamente bajo no son viables comercialmente
+        **1. Valores Atípicos:**
+        - **Detección:** [Descripción de cómo detectaste los outliers]
+        - **Decisión:** [Qué hiciste con ellos: eliminar, cap ear, mantener]
+        - **Justificación:** [Por qué tomaste esa decisión]
         
-        **2. Existencias Negativas:**
-        - Encontrados 23 SKUs con existencias negativas
-        - **Decisión:** Ajustados a 0 y marcados para revisión
-        - **Justificación:** Existencias negativas indican error contable, no inventario real
+        **2. Valores Faltantes:**
+        - **Columnas afectadas:** [Lista de columnas]
+        - **Decisión:** [Imputación, eliminación, etc.]
+        - **Método:** [Media, mediana, moda, forward fill, etc.]
+        - **Justificación:** [Por qué elegiste ese método]
         
-        **3. Lead Time Mezclado con Fechas:**
-        - Columna Lead_Time contenía fechas en algunos registros
-        - **Decisión:** Extracción de días numéricos, conversión de fechas a días desde registro
-        - **Justificación:** Necesidad de uniformidad para cálculos de brecha de entrega
+        **3. Duplicados:**
+        - **Cantidad detectada:** [Número]
+        - **Criterio:** [Qué columnas usaste para identificarlos]
+        - **Decisión:** [Eliminar, mantener]
         
-        ---
+        **4. Transformaciones:**
+        - **Variables creadas:** [Lista de nuevas columnas]
+        - **Fórmulas aplicadas:** [Ej: Margen = (Precio - Costo) / Precio * 100]
+        - **Propósito:** [Para qué análisis se usarán]
         
-        ### Decisiones de Limpieza - Transacciones
-        
-        **1. SKUs Fantasma (Sin Match en Inventario):**
-        - Detectadas 1,247 ventas sin SKU en inventario (12.5% del total)
-        - **Decisión:** Mantenidas con flag "SKU_No_Match" = True
-        - **Justificación:** Representan ventas reales, posibles productos nuevos o descatalogados
-        - **Impacto:** Permite cuantificar riesgo financiero de ventas no controladas
-        
-        **2. Tiempos de Entrega Outliers:**
-        - 156 registros con tiempo de entrega > 100 días
-        - **Decisión:** Capeados a percentil 99 (45 días)
-        - **Justificación:** Outliers extremos sesgan análisis de correlación con NPS
-        
-        **3. Formatos de Fecha Inconsistentes:**
-        - Mezcla de formatos DD/MM/YYYY y MM/DD/YYYY
-        - **Decisión:** Estandarización a YYYY-MM-DD usando pandas.to_datetime con dayfirst=True
-        
-        ---
-        
-        ### Decisiones de Limpieza - Feedback
-        
-        **1. Duplicados Intencionales:**
-        - Eliminados 237 registros duplicados (5.3%)
-        - **Criterio:** ID_Transaccion + Fecha_Feedback + NPS idénticos
-        
-        **2. Edades Imposibles:**
-        - 18 clientes con edad > 120 años
-        - **Decisión:** Imputados con la mediana del grupo de categoría
-        - **Justificación:** Media sensible a outliers, mediana más robusta
-        
-        **3. Normalización de Escala NPS:**
-        - Escala original: 0-10
-        - **Decisión:** Mantenida escala original, creada variable categórica (Detractor/Neutral/Promotor)
-        - Detractores: 0-6, Neutrales: 7-8, Promotores: 9-10
-        
-        ---
-        
-        **📊 Resultado Final:**
-        - Inventario: 2,455 registros limpios (98.2% del original)
-        - Transacciones: 9,844 registros limpios (98.4% del original)
-        - Feedback: 4,263 registros limpios (94.7% del original)
+        **5. Resultado Final:**
+        - **Registros originales:** [Número]
+        - **Registros finales:** [Número]
+        - **Tasa de retención:** [Porcentaje]
         """)
 
 # ================================
@@ -550,13 +585,21 @@ with tab2:
     # Estadísticas descriptivas
     st.subheader("📈 Estadísticas Descriptivas")
     
+    available_datasets_eda = ["Datos Filtrados"]
+    if inventario is not None:
+        available_datasets_eda.append("Inventario")
+    if transacciones is not None:
+        available_datasets_eda.append("Transacciones")
+    if feedback is not None:
+        available_datasets_eda.append("Feedback")
+    
     dataset_eda = st.selectbox(
         "Selecciona el dataset para análisis:",
-        ["Datos Integrados", "Inventario", "Transacciones", "Feedback"],
+        available_datasets_eda,
         key="eda_dataset"
     )
     
-    if dataset_eda == "Datos Integrados":
+    if dataset_eda == "Datos Filtrados":
         df_eda = filtered_data
     elif dataset_eda == "Inventario":
         df_eda = inventario
@@ -657,6 +700,8 @@ with tab2:
                 )
                 fig.update_layout(showlegend=False)
                 st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info(f"No hay variables {var_type.lower()}s disponibles en este dataset.")
     
     st.markdown("---")
     
@@ -705,76 +750,19 @@ with tab2:
             st.dataframe(corr_df, use_container_width=True, hide_index=True)
     else:
         st.info("Se necesitan al menos 2 variables numéricas para calcular correlaciones.")
-    
-    st.markdown("---")
-    
-    # Feature Engineering Explicado
-    st.subheader("🔧 Feature Engineering Implementado")
-    
-    st.markdown("""
-    <div class="success-box">
-    <strong>✅ Variables Derivadas Creadas:</strong>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("""
-        **1. Margen de Utilidad**
-        ```python
-        Margen_Utilidad = (Precio_Venta - Costo_Unitario) / Precio_Venta * 100
-        ```
-        - **Propósito:** Identificar productos con margen negativo
-        - **Uso:** Análisis de rentabilidad por SKU y canal
-        
-        **2. Brecha de Entrega**
-        ```python
-        Brecha_Entrega = Dias_Entrega_Real - Lead_Time_Prometido
-        ```
-        - **Propósito:** Medir incumplimiento logístico
-        - **Uso:** Correlación con NPS y análisis de bodegas
-        
-        **3. Ratio de Soporte**
-        ```python
-        Ratio_Soporte = Tickets_Soporte / Total_Ventas (por categoría)
-        ```
-        - **Propósito:** Detectar categorías problemáticas
-        - **Uso:** Análisis de calidad de producto
-        """)
-    
-    with col2:
-        st.markdown("""
-        **4. Edad del Inventario**
-        ```python
-        Edad_Inventario = Fecha_Actual - Ultima_Revision (días)
-        ```
-        - **Propósito:** Identificar stock desactualizado
-        - **Uso:** Riesgo operativo y correlación con satisfacción
-        
-        **5. Categoría NPS**
-        ```python
-        NPS_Categoria = 
-            'Detractor' si NPS <= 6
-            'Neutral' si 7 <= NPS <= 8
-            'Promotor' si NPS >= 9
-        ```
-        - **Propósito:** Segmentación de clientes
-        - **Uso:** Análisis de fidelidad y tendencias
-        
-        **6. Flag SKU Fantasma**
-        ```python
-        SKU_No_Match = True si SKU no existe en inventario
-        ```
-        - **Propósito:** Cuantificar ventas no controladas
-        - **Uso:** Análisis de riesgo financiero
-        """)
 
 # ================================
 # TAB 3: ANÁLISIS ESTRATÉGICO
 # ================================
 with tab3:
     st.header("💰 Análisis Estratégico - Preguntas de Alta Gerencia")
+    
+    st.markdown("""
+    <div class="insight-box">
+    <strong>💡 Nota:</strong> Esta sección requiere variables específicas en tus datos.
+    Si alguna columna no existe, verás un mensaje de advertencia con las columnas requeridas.
+    </div>
+    """, unsafe_allow_html=True)
     
     # Sub-tabs para cada pregunta
     q1, q2, q3, q4, q5 = st.tabs([
@@ -794,8 +782,6 @@ with tab3:
         una pérdida aceptable por volumen o una falla crítica de precios.
         """)
         
-        # NOTA: Aquí debes adaptar los nombres de columnas según tus datos
-        # Ejemplo de cálculo de margen
         if 'Margen_Utilidad' in filtered_data.columns:
             # SKUs con margen negativo
             negative_margin = filtered_data[filtered_data['Margen_Utilidad'] < 0].copy()
@@ -807,45 +793,47 @@ with tab3:
                 with col1:
                     st.metric(
                         "SKUs con Margen Negativo",
-                        f"{negative_margin['SKU'].nunique():,}",
+                        f"{negative_margin['SKU'].nunique():,}" if 'SKU' in negative_margin.columns else "N/A",
                         delta=f"{len(negative_margin):,} ventas"
                     )
                 
                 with col2:
-                    total_loss = negative_margin['Margen_Utilidad'].sum() if 'Margen_Utilidad' in negative_margin.columns else 0
-                    st.metric(
-                        "Pérdida Total Estimada",
-                        f"${abs(total_loss):,.2f}",
-                        delta="Negativo",
-                        delta_color="inverse"
-                    )
+                    if 'Precio_Venta' in negative_margin.columns:
+                        total_loss = (negative_margin['Margen_Utilidad'] * negative_margin['Precio_Venta'] / 100).sum()
+                        st.metric(
+                            "Pérdida Total Estimada",
+                            f"${abs(total_loss):,.2f}",
+                            delta="Negativo",
+                            delta_color="inverse"
+                        )
                 
                 with col3:
-                    pct_skus = (negative_margin['SKU'].nunique() / filtered_data['SKU'].nunique() * 100) if 'SKU' in filtered_data.columns else 0
-                    st.metric(
-                        "% SKUs Afectados",
-                        f"{pct_skus:.1f}%"
-                    )
+                    if 'SKU' in filtered_data.columns:
+                        pct_skus = (negative_margin['SKU'].nunique() / filtered_data['SKU'].nunique() * 100)
+                        st.metric(
+                            "% SKUs Afectados",
+                            f"{pct_skus:.1f}%"
+                        )
                 
                 with col4:
-                    if 'Canal' in negative_margin.columns:
-                        online_loss = negative_margin[negative_margin['Canal'] == 'Online']['Margen_Utilidad'].sum() if 'Margen_Utilidad' in negative_margin.columns else 0
-                        st.metric(
-                            "Pérdida Canal Online",
-                            f"${abs(online_loss):,.2f}"
-                        )
+                    if 'Canal' in negative_margin.columns and 'Precio_Venta' in negative_margin.columns:
+                        online_df = negative_margin[negative_margin['Canal'] == 'Online']
+                        if len(online_df) > 0:
+                            online_loss = (online_df['Margen_Utilidad'] * online_df['Precio_Venta'] / 100).sum()
+                            st.metric(
+                                "Pérdida Canal Online",
+                                f"${abs(online_loss):,.2f}"
+                            )
                 
                 st.markdown("---")
                 
                 # Gráfico: Top 10 SKUs con peor margen
-                st.markdown("**📉 Top 10 SKUs con Peor Margen**")
-                
-                if 'Precio_Venta' in negative_margin.columns:
+                if 'SKU' in negative_margin.columns:
+                    st.markdown("**📉 Top 10 SKUs con Peor Margen**")
+                    
                     top_worst = negative_margin.groupby('SKU').agg({
-                        'Margen_Utilidad': 'mean',
-                        'Precio_Venta': 'sum',
-                        'SKU': 'count'
-                    }).rename(columns={'SKU': 'Cantidad_Ventas'}).sort_values('Margen_Utilidad').head(10)
+                        'Margen_Utilidad': 'mean'
+                    }).sort_values('Margen_Utilidad').head(10)
                     
                     fig = px.bar(
                         top_worst.reset_index(),
@@ -859,39 +847,15 @@ with tab3:
                     fig.update_layout(showlegend=False, height=400)
                     st.plotly_chart(fig, use_container_width=True)
                 
-                # Análisis por Canal
-                if 'Canal' in negative_margin.columns:
-                    st.markdown("**📊 Análisis por Canal de Venta**")
-                    
-                    canal_analysis = negative_margin.groupby('Canal').agg({
-                        'SKU': 'count',
-                        'Margen_Utilidad': 'sum'
-                    }).rename(columns={'SKU': 'Ventas', 'Margen_Utilidad': 'Pérdida_Total'})
-                    
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        fig = px.pie(
-                            canal_analysis.reset_index(),
-                            values='Ventas',
-                            names='Canal',
-                            title='Distribución de Ventas con Margen Negativo por Canal',
-                            color_discrete_sequence=px.colors.sequential.Blues_r
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-                    
-                    with col2:
-                        st.dataframe(canal_analysis, use_container_width=True)
-                
                 # Recomendaciones
                 st.markdown("---")
                 st.markdown("""
                 <div class="warning-box">
                 <strong>⚠️ Recomendaciones Críticas:</strong><br><br>
-                1. <strong>Revisión Inmediata de Precios:</strong> Ajustar precios de los 10 SKUs con peor margen<br>
+                1. <strong>Revisión Inmediata de Precios:</strong> Ajustar precios de los SKUs con peor margen<br>
                 2. <strong>Análisis de Costos:</strong> Verificar si los costos unitarios están correctamente registrados<br>
-                3. <strong>Estrategia por Canal:</strong> El canal Online muestra mayor concentración de pérdidas - revisar política de descuentos<br>
-                4. <strong>Decisión de Descatalogación:</strong> Evaluar si los productos con margen negativo persistente deben eliminarse del catálogo
+                3. <strong>Estrategia por Canal:</strong> Revisar política de descuentos por canal<br>
+                4. <strong>Decisión de Descatalogación:</strong> Evaluar productos con margen negativo persistente
                 </div>
                 """, unsafe_allow_html=True)
                 
@@ -900,8 +864,10 @@ with tab3:
         
         else:
             st.warning("""
-            ⚠️ Para realizar este análisis, asegúrate de que tu dataset integrado incluya la columna:
+            ⚠️ **Columnas requeridas no encontradas:**
             - `Margen_Utilidad` (calculada como: (Precio_Venta - Costo_Unitario) / Precio_Venta * 100)
+            
+            **Tip:** Crea esta columna en tu proceso de limpieza de datos antes de cargar el archivo.
             """)
     
     # PREGUNTA 2: Crisis Logística
@@ -910,23 +876,26 @@ with tab3:
         
         st.markdown("""
         **Objetivo:** Identificar ciudades y bodegas donde la correlación entre Tiempo de Entrega 
-        y NPS bajo es más fuerte, para priorizar cambio de operador.
+        y NPS bajo es más fuerte.
         """)
         
-        if 'Brecha_Entrega' in filtered_data.columns and 'NPS' in filtered_data.columns:
-            # Calcular correlación por ciudad/bodega
+        required_cols = ['Brecha_Entrega', 'NPS', 'Ciudad', 'Bodega']
+        missing_cols = [col for col in required_cols if col not in filtered_data.columns]
+        
+        if not missing_cols:
+            # Análisis por ciudad/bodega
             col1, col2 = st.columns(2)
             
             with col1:
-                if 'Ciudad' in filtered_data.columns:
-                    st.markdown("**📍 Análisis por Ciudad**")
-                    
-                    city_corr = filtered_data.groupby('Ciudad').apply(
-                        lambda x: x['Brecha_Entrega'].corr(x['NPS']) if len(x) > 5 else np.nan
-                    ).sort_values()
-                    
-                    city_corr = city_corr.dropna().head(10)
-                    
+                st.markdown("**📍 Análisis por Ciudad**")
+                
+                city_corr = filtered_data.groupby('Ciudad').apply(
+                    lambda x: x['Brecha_Entrega'].corr(x['NPS']) if len(x) > 5 else np.nan
+                ).sort_values()
+                
+                city_corr = city_corr.dropna().head(10)
+                
+                if len(city_corr) > 0:
                     fig = px.bar(
                         x=city_corr.values,
                         y=city_corr.index,
@@ -938,17 +907,19 @@ with tab3:
                     )
                     fig.update_layout(showlegend=False, height=400)
                     st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("No hay suficientes datos para calcular correlaciones por ciudad.")
             
             with col2:
-                if 'Bodega' in filtered_data.columns:
-                    st.markdown("**🏭 Análisis por Bodega**")
-                    
-                    warehouse_corr = filtered_data.groupby('Bodega').apply(
-                        lambda x: x['Brecha_Entrega'].corr(x['NPS']) if len(x) > 5 else np.nan
-                    ).sort_values()
-                    
-                    warehouse_corr = warehouse_corr.dropna().head(10)
-                    
+                st.markdown("**🏭 Análisis por Bodega**")
+                
+                warehouse_corr = filtered_data.groupby('Bodega').apply(
+                    lambda x: x['Brecha_Entrega'].corr(x['NPS']) if len(x) > 5 else np.nan
+                ).sort_values()
+                
+                warehouse_corr = warehouse_corr.dropna().head(10)
+                
+                if len(warehouse_corr) > 0:
                     fig = px.bar(
                         x=warehouse_corr.values,
                         y=warehouse_corr.index,
@@ -960,58 +931,33 @@ with tab3:
                     )
                     fig.update_layout(showlegend=False, height=400)
                     st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("No hay suficientes datos para calcular correlaciones por bodega.")
             
-            # Mapa de calor
-            st.markdown("---")
-            st.markdown("**🌡️ Mapa de Calor: NPS Promedio vs Tiempo de Entrega Promedio**")
-            
-            if 'Ciudad' in filtered_data.columns and 'Bodega' in filtered_data.columns:
-                heatmap_data = filtered_data.groupby(['Ciudad', 'Bodega']).agg({
-                    'NPS': 'mean',
-                    'Brecha_Entrega': 'mean'
-                }).reset_index()
-                
-                fig = px.scatter(
-                    heatmap_data,
-                    x='Brecha_Entrega',
-                    y='NPS',
-                    size='Brecha_Entrega',
-                    color='NPS',
-                    hover_data=['Ciudad', 'Bodega'],
-                    title='Relación entre Brecha de Entrega y NPS por Ciudad/Bodega',
-                    labels={'Brecha_Entrega': 'Brecha de Entrega (días)', 'NPS': 'NPS Promedio'},
-                    color_continuous_scale='RdYlGn'
-                )
-                fig.add_hline(y=7, line_dash="dash", line_color="red", annotation_text="NPS Crítico")
-                fig.add_vline(x=0, line_dash="dash", line_color="gray", annotation_text="Entrega a Tiempo")
-                st.plotly_chart(fig, use_container_width=True)
-            
-            # Zona crítica identificada
+            # Recomendaciones
             st.markdown("---")
             st.markdown("""
             <div class="warning-box">
-            <strong>🚨 Zona Crítica Identificada:</strong><br><br>
-            Basado en el análisis de correlación, las siguientes ubicaciones requieren acción inmediata:
+            <strong>🚨 Acciones Recomendadas:</strong><br><br>
             <ul>
-                <li><strong>Ciudad con Mayor Impacto:</strong> [Automáticamente se identificará la ciudad con peor correlación]</li>
-                <li><strong>Bodega Prioritaria:</strong> [Automáticamente se identificará la bodega con peor correlación]</li>
-                <li><strong>Acciones Recomendadas:</strong></li>
-                <ul>
-                    <li>Cambio de operador logístico en zona crítica</li>
-                    <li>Auditoría de procesos de despacho</li>
-                    <li>Revisión de promesas de entrega (reducir lead time prometido)</li>
-                    <li>Implementación de tracking en tiempo real</li>
-                </ul>
+                <li>Cambio de operador logístico en zonas críticas</li>
+                <li>Auditoría de procesos de despacho</li>
+                <li>Revisión de promesas de entrega</li>
+                <li>Implementación de tracking en tiempo real</li>
             </ul>
             </div>
             """, unsafe_allow_html=True)
         
         else:
-            st.warning("""
-            ⚠️ Para realizar este análisis, asegúrate de que tu dataset incluya:
-            - `Brecha_Entrega` (Dias_Entrega_Real - Lead_Time_Prometido)
-            - `NPS` (Puntuación de satisfacción del cliente)
-            - `Ciudad` y `Bodega`
+            st.warning(f"""
+            ⚠️ **Columnas requeridas no encontradas:**
+            {', '.join([f'`{col}`' for col in missing_cols])}
+            
+            **Columnas necesarias para este análisis:**
+            - `Brecha_Entrega`: Días de entrega real - Lead time prometido
+            - `NPS`: Puntuación de satisfacción (0-10)
+            - `Ciudad`: Ciudad de entrega
+            - `Bodega`: Bodega de origen
             """)
     
     # PREGUNTA 3: Venta Invisible
@@ -1024,7 +970,6 @@ with tab3:
         """)
         
         if 'SKU_No_Match' in filtered_data.columns:
-            # Filtrar ventas sin match
             invisible_sales = filtered_data[filtered_data['SKU_No_Match'] == True]
             total_sales = filtered_data
             
@@ -1061,86 +1006,26 @@ with tab3:
                     f"{unique_skus:,}"
                 )
             
-            # Gráfico de evolución temporal
-            if 'Fecha_Venta' in invisible_sales.columns:
-                st.markdown("---")
-                st.markdown("**📈 Evolución Temporal de Ventas Invisibles**")
-                
-                invisible_sales['Mes'] = invisible_sales['Fecha_Venta'].dt.to_period('M').astype(str)
-                
-                temporal = invisible_sales.groupby('Mes').agg({
-                    'Precio_Venta': 'sum',
-                    'SKU': 'count'
-                }).rename(columns={'Precio_Venta': 'Ingresos', 'SKU': 'Cantidad_Ventas'})
-                
-                fig = make_subplots(specs=[[{"secondary_y": True}]])
-                
-                fig.add_trace(
-                    go.Bar(x=temporal.index, y=temporal['Ingresos'], name="Ingresos", marker_color='#F96167'),
-                    secondary_y=False
-                )
-                
-                fig.add_trace(
-                    go.Scatter(x=temporal.index, y=temporal['Cantidad_Ventas'], name="Cantidad Ventas", 
-                               line=dict(color='#1E2761', width=3), mode='lines+markers'),
-                    secondary_y=True
-                )
-                
-                fig.update_xaxes(title_text="Mes")
-                fig.update_yaxes(title_text="Ingresos (USD)", secondary_y=False)
-                fig.update_yaxes(title_text="Cantidad de Ventas", secondary_y=True)
-                fig.update_layout(title="Tendencia de Ventas Sin Control de Inventario", height=400)
-                
-                st.plotly_chart(fig, use_container_width=True)
-            
-            # Top SKUs no catalogados
-            st.markdown("---")
-            st.markdown("**🔝 Top 10 SKUs No Catalogados por Ingresos**")
-            
-            if 'Precio_Venta' in invisible_sales.columns:
-                top_invisible = invisible_sales.groupby('SKU').agg({
-                    'Precio_Venta': 'sum',
-                    'SKU': 'count'
-                }).rename(columns={'Precio_Venta': 'Ingresos_Total', 'SKU': 'Ventas'}).sort_values('Ingresos_Total', ascending=False).head(10)
-                
-                st.dataframe(top_invisible, use_container_width=True)
-            
             # Recomendaciones
             st.markdown("---")
-            st.markdown(f"""
+            st.markdown("""
             <div class="warning-box">
-            <strong>💰 Impacto Financiero Cuantificado:</strong><br><br>
+            <strong>💰 Acciones Correctivas:</strong><br><br>
             <ul>
-                <li><strong>Ingresos en Riesgo:</strong> ${invisible_revenue:,.2f} ({pct_revenue:.1f}% del total)</li>
-                <li><strong>Causa Raíz Probable:</strong></li>
-                <ul>
-                    <li>Productos nuevos lanzados sin actualizar maestro de inventario</li>
-                    <li>SKUs descatalogados que siguen vendiéndose</li>
-                    <li>Errores de digitación en el sistema de ventas</li>
-                    <li>Falta de sincronización entre sistemas (ERP vs POS)</li>
-                </ul>
-                <li><strong>Riesgo Operativo:</strong></li>
-                <ul>
-                    <li>Imposibilidad de calcular margen real</li>
-                    <li>Descontrol de inventario</li>
-                    <li>Proyecciones financieras inexactas</li>
-                    <li>Auditorías comprometidas</li>
-                </ul>
-                <li><strong>Acciones Correctivas:</strong></li>
-                <ul>
-                    <li>Catalogar urgentemente los Top 10 SKUs no catalogados</li>
-                    <li>Implementar validación de SKU en punto de venta</li>
-                    <li>Sincronización diaria entre ERP y sistema de ventas</li>
-                    <li>Dashboard de alertas para SKUs nuevos detectados</li>
-                </ul>
+                <li>Catalogar urgentemente los SKUs no catalogados con mayor ingreso</li>
+                <li>Implementar validación de SKU en punto de venta</li>
+                <li>Sincronización diaria entre sistemas</li>
+                <li>Dashboard de alertas para SKUs nuevos detectados</li>
             </ul>
             </div>
             """, unsafe_allow_html=True)
         
         else:
             st.warning("""
-            ⚠️ Para realizar este análisis, asegúrate de que tu dataset incluya:
-            - `SKU_No_Match` (Flag booleano indicando si el SKU existe en inventario)
+            ⚠️ **Columnas requeridas no encontradas:**
+            - `SKU_No_Match` (Flag booleano: True si el SKU no existe en inventario)
+            
+            **Tip:** Crea esta columna al hacer el merge entre transacciones e inventario.
             """)
     
     # PREGUNTA 4: Diagnóstico de Fidelidad
@@ -1149,19 +1034,19 @@ with tab3:
         
         st.markdown("""
         **Objetivo:** Identificar categorías con alta disponibilidad pero sentimiento negativo del cliente.
-        Explicar la paradoja: ¿Es mala calidad o sobrecosto?
         """)
         
-        if 'Categoria' in filtered_data.columns and 'Existencias' in filtered_data.columns and 'NPS' in filtered_data.columns:
+        required_cols_fid = ['Categoria', 'Existencias', 'NPS']
+        missing_cols_fid = [col for col in required_cols_fid if col not in filtered_data.columns]
+        
+        if not missing_cols_fid:
             # Análisis por categoría
             category_analysis = filtered_data.groupby('Categoria').agg({
                 'Existencias': 'mean',
-                'NPS': 'mean',
-                'Precio_Venta': 'mean' if 'Precio_Venta' in filtered_data.columns else 'count'
+                'NPS': 'mean'
             }).rename(columns={
                 'Existencias': 'Stock_Promedio',
-                'NPS': 'NPS_Promedio',
-                'Precio_Venta': 'Precio_Promedio'
+                'NPS': 'NPS_Promedio'
             })
             
             # Identificar paradoja: Alto stock + NPS bajo
@@ -1172,43 +1057,13 @@ with tab3:
             
             paradox_categories = category_analysis[category_analysis['Paradoja'] == True]
             
-            # KPIs
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.metric(
-                    "Categorías con Paradoja",
-                    f"{len(paradox_categories)}",
-                    delta=f"{len(paradox_categories)/len(category_analysis)*100:.1f}% del total"
-                )
-            
-            with col2:
-                if len(paradox_categories) > 0:
-                    avg_nps_paradox = paradox_categories['NPS_Promedio'].mean()
-                    st.metric(
-                        "NPS Promedio (Paradoja)",
-                        f"{avg_nps_paradox:.1f}",
-                        delta="Crítico",
-                        delta_color="inverse"
-                    )
-            
-            with col3:
-                if len(paradox_categories) > 0:
-                    avg_stock_paradox = paradox_categories['Stock_Promedio'].mean()
-                    st.metric(
-                        "Stock Promedio (Paradoja)",
-                        f"{avg_stock_paradox:,.0f} unidades"
-                    )
-            
             # Gráfico de dispersión
-            st.markdown("---")
             st.markdown("**📊 Matriz: Stock vs Sentimiento del Cliente**")
             
             fig = px.scatter(
                 category_analysis.reset_index(),
                 x='Stock_Promedio',
                 y='NPS_Promedio',
-                size='Precio_Promedio' if 'Precio_Promedio' in category_analysis.columns else None,
                 color='Paradoja',
                 hover_data=['Categoria'],
                 title='Análisis de Categorías: Stock vs NPS',
@@ -1216,95 +1071,28 @@ with tab3:
                 color_discrete_map={True: '#F96167', False: '#97BC62'}
             )
             
-            # Líneas de referencia
             fig.add_hline(y=7, line_dash="dash", line_color="red", annotation_text="NPS Crítico")
             fig.add_vline(x=category_analysis['Stock_Promedio'].median(), line_dash="dash", 
                          line_color="gray", annotation_text="Stock Mediano")
             
-            # Anotar cuadrante de paradoja
-            fig.add_annotation(
-                x=category_analysis['Stock_Promedio'].max() * 0.8,
-                y=category_analysis['NPS_Promedio'].min() * 1.1,
-                text="ZONA DE PARADOJA:<br>Alto Stock + NPS Bajo",
-                showarrow=False,
-                bgcolor="#FFE6E6",
-                bordercolor="#F96167",
-                borderwidth=2
-            )
-            
             st.plotly_chart(fig, use_container_width=True)
             
-            # Tabla de categorías con paradoja
             if len(paradox_categories) > 0:
                 st.markdown("---")
                 st.markdown("**⚠️ Categorías con Paradoja Detectada**")
-                
-                paradox_display = paradox_categories[['Stock_Promedio', 'NPS_Promedio', 'Precio_Promedio']].copy()
-                paradox_display = paradox_display.sort_values('NPS_Promedio')
-                
-                st.dataframe(paradox_display, use_container_width=True)
-                
-                # Análisis de causa raíz
-                st.markdown("---")
-                st.markdown("**🔍 Análisis de Causa Raíz**")
-                
-                # Comparar precios vs mercado (simulación - ajustar según datos reales)
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.markdown("""
-                    <div class="insight-box">
-                    <strong>Hipótesis 1: Sobrecosto</strong><br><br>
-                    Posible evidencia de precios inflados:
-                    <ul>
-                        <li>Precio promedio significativamente superior a otras categorías</li>
-                        <li>Alto stock sugiere baja rotación por precio</li>
-                        <li>NPS bajo correlacionado con comentarios de "caro" en feedback</li>
-                    </ul>
-                    <br>
-                    <strong>Acción sugerida:</strong> Ajuste de precios o promociones
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with col2:
-                    st.markdown("""
-                    <div class="insight-box">
-                    <strong>Hipótesis 2: Mala Calidad</strong><br><br>
-                    Posible evidencia de problemas de calidad:
-                    <ul>
-                        <li>Alto ratio de tickets de soporte en estas categorías</li>
-                        <li>Comentarios negativos en feedback relacionados con durabilidad/funcionalidad</li>
-                        <li>Altas devoluciones o cambios</li>
-                    </ul>
-                    <br>
-                    <strong>Acción sugerida:</strong> Revisión de proveedores o descatalogación
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                # Recomendación final
-                st.markdown("---")
-                st.markdown("""
-                <div class="warning-box">
-                <strong>📋 Plan de Acción Recomendado:</strong><br><br>
-                1. <strong>Investigación Profunda:</strong> Análisis de comentarios de feedback para estas categorías<br>
-                2. <strong>Benchmarking de Precios:</strong> Comparar con competencia directa<br>
-                3. <strong>Análisis de Costos:</strong> Verificar si margen justifica precio actual<br>
-                4. <strong>Decisión Estratégica:</strong><br>
-                   - Si es sobrecosto: Reducir precio 10-15% y monitorear NPS<br>
-                   - Si es mala calidad: Cambiar proveedor o descatalogar producto<br>
-                5. <strong>Reducción de Stock:</strong> Liquidar inventario excesivo con promociones
-                </div>
-                """, unsafe_allow_html=True)
-            
+                st.dataframe(paradox_categories, use_container_width=True)
             else:
                 st.success("✅ No se detectaron categorías con la paradoja de alto stock y bajo NPS.")
         
         else:
-            st.warning("""
-            ⚠️ Para realizar este análisis, asegúrate de que tu dataset incluya:
-            - `Categoria`
-            - `Existencias` (stock disponible)
-            - `NPS` (puntuación de satisfacción)
+            st.warning(f"""
+            ⚠️ **Columnas requeridas no encontradas:**
+            {', '.join([f'`{col}`' for col in missing_cols_fid])}
+            
+            **Columnas necesarias:**
+            - `Categoria`: Categoría del producto
+            - `Existencias`: Stock disponible
+            - `NPS`: Puntuación de satisfacción
             """)
     
     # PREGUNTA 5: Riesgo Operativo
@@ -1313,155 +1101,78 @@ with tab3:
         
         st.markdown("""
         **Objetivo:** Visualizar la relación entre antigüedad de última revisión del stock 
-        y tasa de tickets de soporte. Identificar bodegas operando "a ciegas".
+        y tasa de tickets de soporte.
         """)
         
-        if 'Edad_Inventario' in filtered_data.columns and 'Ratio_Soporte' in filtered_data.columns:
+        required_cols_risk = ['Edad_Inventario', 'Ratio_Soporte', 'Bodega']
+        missing_cols_risk = [col for col in required_cols_risk if col not in filtered_data.columns]
+        
+        if not missing_cols_risk:
             # Análisis por bodega
-            if 'Bodega' in filtered_data.columns:
-                warehouse_risk = filtered_data.groupby('Bodega').agg({
-                    'Edad_Inventario': 'mean',
-                    'Ratio_Soporte': 'mean',
-                    'NPS': 'mean' if 'NPS' in filtered_data.columns else 'count'
-                }).rename(columns={
-                    'Edad_Inventario': 'Dias_Sin_Revision',
-                    'Ratio_Soporte': 'Tickets_Por_Venta',
-                    'NPS': 'NPS_Promedio'
-                })
-                
-                # Identificar bodegas críticas (>30 días sin revisión)
-                warehouse_risk['Critica'] = warehouse_risk['Dias_Sin_Revision'] > 30
-                
-                critical_warehouses = warehouse_risk[warehouse_risk['Critica'] == True]
-                
-                # KPIs
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    st.metric(
-                        "Bodegas Críticas",
-                        f"{len(critical_warehouses)}",
-                        delta=f"{len(critical_warehouses)/len(warehouse_risk)*100:.1f}% del total"
-                    )
-                
-                with col2:
-                    if len(critical_warehouses) > 0:
-                        avg_days = critical_warehouses['Dias_Sin_Revision'].mean()
-                        st.metric(
-                            "Días Sin Revisión (Promedio)",
-                            f"{avg_days:.0f} días",
-                            delta="Crítico",
-                            delta_color="inverse"
-                        )
-                
-                with col3:
-                    if len(critical_warehouses) > 0:
-                        avg_tickets = critical_warehouses['Tickets_Por_Venta'].mean()
-                        st.metric(
-                            "Tickets por Venta (Bodegas Críticas)",
-                            f"{avg_tickets:.2%}",
-                            delta="Alto",
-                            delta_color="inverse"
-                        )
-                
-                # Gráfico de dispersión
-                st.markdown("---")
-                st.markdown("**📈 Relación: Antigüedad de Revisión vs Tickets de Soporte**")
-                
-                fig = px.scatter(
-                    warehouse_risk.reset_index(),
-                    x='Dias_Sin_Revision',
-                    y='Tickets_Por_Venta',
-                    size='NPS_Promedio' if 'NPS_Promedio' in warehouse_risk.columns else None,
-                    color='Critica',
-                    hover_data=['Bodega'],
-                    title='Riesgo Operativo por Bodega',
-                    labels={
-                        'Dias_Sin_Revision': 'Días desde Última Revisión',
-                        'Tickets_Por_Venta': 'Ratio Tickets de Soporte'
-                    },
-                    color_discrete_map={True: '#F96167', False: '#97BC62'},
-                    trendline="ols"  # Línea de tendencia
-                )
-                
-                fig.add_vline(x=30, line_dash="dash", line_color="red", 
-                             annotation_text="Límite Crítico (30 días)")
-                
-                st.plotly_chart(fig, use_container_width=True)
-                
-                # Correlación
-                correlation = warehouse_risk['Dias_Sin_Revision'].corr(warehouse_risk['Tickets_Por_Venta'])
-                
-                st.markdown(f"""
-                **📊 Correlación Detectada:** {correlation:.3f}
-                
-                {'✅ Correlación positiva significativa: A mayor antigüedad de revisión, mayor tasa de tickets de soporte.' 
-                if correlation > 0.3 else 
-                '⚠️ Correlación moderada o baja: La antigüedad de revisión tiene impacto limitado en tickets de soporte.' 
-                if correlation > 0 else
-                '❌ Correlación negativa o nula: No se observa relación directa entre estas variables.'}
-                """)
-                
-                # Tabla de bodegas críticas
-                if len(critical_warehouses) > 0:
-                    st.markdown("---")
-                    st.markdown("**🚨 Bodegas Operando 'A Ciegas'**")
-                    
-                    critical_display = critical_warehouses.sort_values('Dias_Sin_Revision', ascending=False)
-                    st.dataframe(critical_display, use_container_width=True)
-                
-                # Impacto en satisfacción
-                st.markdown("---")
-                st.markdown("**😞 Impacto en Satisfacción del Cliente**")
-                
-                if 'NPS_Promedio' in warehouse_risk.columns:
-                    fig = px.box(
-                        warehouse_risk.reset_index(),
-                        x='Critica',
-                        y='NPS_Promedio',
-                        color='Critica',
-                        title='Comparación de NPS: Bodegas Críticas vs No Críticas',
-                        labels={'Critica': 'Bodega Crítica', 'NPS_Promedio': 'NPS Promedio'},
-                        color_discrete_map={True: '#F96167', False: '#97BC62'}
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                
-                # Recomendaciones
-                st.markdown("---")
-                st.markdown("""
-                <div class="warning-box">
-                <strong>🔧 Plan de Mejora Operativa:</strong><br><br>
-                1. <strong>Acción Inmediata (próximos 7 días):</strong><br>
-                   - Auditoría física completa en bodegas críticas<br>
-                   - Actualización de registros de inventario<br>
-                   - Capacitación urgente al personal de bodega<br><br>
-                
-                2. <strong>Medidas de Mediano Plazo (próximos 30 días):</strong><br>
-                   - Implementar sistema de revisión automática cada 14 días<br>
-                   - Dashboard de alertas cuando revisión > 21 días<br>
-                   - Establecer KPI de antigüedad máxima permitida<br><br>
-                
-                3. <strong>Transformación Estructural (próximos 90 días):</strong><br>
-                   - Digitalización de inventario con RFID o códigos QR<br>
-                   - Sistema de inventario perpetuo (actualización en tiempo real)<br>
-                   - Integración automática entre bodega y sistema de tickets<br><br>
-                
-                4. <strong>ROI Estimado:</strong><br>
-                   - Reducción de tickets de soporte: 30-40%<br>
-                   - Mejora de NPS: +2 puntos en 6 meses<br>
-                   - Ahorro operativo: $50k-$80k anuales (menos horas de soporte)
-                </div>
-                """, unsafe_allow_html=True)
+            warehouse_risk = filtered_data.groupby('Bodega').agg({
+                'Edad_Inventario': 'mean',
+                'Ratio_Soporte': 'mean'
+            }).rename(columns={
+                'Edad_Inventario': 'Dias_Sin_Revision',
+                'Ratio_Soporte': 'Tickets_Por_Venta'
+            })
             
-            else:
-                st.warning("⚠️ Se requiere la columna 'Bodega' para análisis por ubicación.")
+            warehouse_risk['Critica'] = warehouse_risk['Dias_Sin_Revision'] > 30
+            critical_warehouses = warehouse_risk[warehouse_risk['Critica'] == True]
+            
+            # Gráfico de dispersión
+            st.markdown("**📈 Relación: Antigüedad de Revisión vs Tickets de Soporte**")
+            
+            fig = px.scatter(
+                warehouse_risk.reset_index(),
+                x='Dias_Sin_Revision',
+                y='Tickets_Por_Venta',
+                color='Critica',
+                hover_data=['Bodega'],
+                title='Riesgo Operativo por Bodega',
+                labels={
+                    'Dias_Sin_Revision': 'Días desde Última Revisión',
+                    'Tickets_Por_Venta': 'Ratio Tickets de Soporte'
+                },
+                color_discrete_map={True: '#F96167', False: '#97BC62'},
+                trendline="ols"
+            )
+            
+            fig.add_vline(x=30, line_dash="dash", line_color="red", 
+                         annotation_text="Límite Crítico (30 días)")
+            
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Correlación
+            correlation = warehouse_risk['Dias_Sin_Revision'].corr(warehouse_risk['Tickets_Por_Venta'])
+            
+            st.metric("Correlación Detectada", f"{correlation:.3f}")
+            
+            if len(critical_warehouses) > 0:
+                st.markdown("---")
+                st.markdown("**🚨 Bodegas Operando 'A Ciegas'**")
+                st.dataframe(critical_warehouses, use_container_width=True)
+            
+            # Recomendaciones
+            st.markdown("---")
+            st.markdown("""
+            <div class="warning-box">
+            <strong>🔧 Plan de Mejora Operativa:</strong><br><br>
+            1. <strong>Acción Inmediata:</strong> Auditoría física en bodegas críticas<br>
+            2. <strong>Mediano Plazo:</strong> Sistema de revisión automática cada 14 días<br>
+            3. <strong>Transformación:</strong> Digitalización con RFID o códigos QR
+            </div>
+            """, unsafe_allow_html=True)
         
         else:
-            st.warning("""
-            ⚠️ Para realizar este análisis, asegúrate de que tu dataset incluya:
-            - `Edad_Inventario` (días desde última revisión)
-            - `Ratio_Soporte` (tickets de soporte / total ventas)
-            - `Bodega` (ubicación del inventario)
+            st.warning(f"""
+            ⚠️ **Columnas requeridas no encontradas:**
+            {', '.join([f'`{col}`' for col in missing_cols_risk])}
+            
+            **Columnas necesarias:**
+            - `Edad_Inventario`: Días desde última revisión
+            - `Ratio_Soporte`: Tickets de soporte / total ventas
+            - `Bodega`: Ubicación del inventario
             """)
 
 # ================================
@@ -1471,8 +1182,8 @@ with tab4:
     st.header("🤖 Recomendaciones de Inteligencia Artificial")
     
     st.markdown("""
-    Esta sección utiliza **IA Generativa** (Groq/Llama-3) para analizar los datos filtrados 
-    y generar recomendaciones estratégicas personalizadas en tiempo real.
+    Esta sección está preparada para utilizar **IA Generativa** para analizar los datos 
+    y generar recomendaciones estratégicas personalizadas.
     """)
     
     st.markdown("""
@@ -1481,9 +1192,8 @@ with tab4:
     Para habilitar esta funcionalidad, necesitas:
     <ol>
         <li>Obtener una API Key de Groq (https://console.groq.com)</li>
-        <li>Instalar la librería: <code>pip install groq</code></li>
-        <li>Crear un archivo <code>.env</code> con: <code>GROQ_API_KEY=tu_api_key</code></li>
-        <li>Implementar la función de análisis (ver código comentado abajo)</li>
+        <li>Instalar: <code>pip install groq python-dotenv</code></li>
+        <li>Crear archivo <code>.env</code> con: <code>GROQ_API_KEY=tu_api_key</code></li>
     </ol>
     </div>
     """, unsafe_allow_html=True)
@@ -1503,81 +1213,12 @@ with tab4:
     # Área de texto para pregunta personalizada
     custom_query = st.text_area(
         "O escribe tu propia pregunta de negocio:",
-        placeholder="Ejemplo: ¿Cuáles son las principales oportunidades de mejora en nuestro negocio basándote en los datos?"
+        placeholder="Ejemplo: ¿Cuáles son las principales oportunidades de mejora basándote en los datos?"
     )
     
     if st.button("🚀 Generar Análisis con IA", type="primary"):
         st.markdown("---")
         
-        # NOTA: Aquí deberías implementar la integración real con Groq
-        # Ejemplo de implementación comentado:
-        
-        """
-        # CÓDIGO DE INTEGRACIÓN CON GROQ (Descomentar y adaptar):
-        
-        from groq import Groq
-        import os
-        from dotenv import load_dotenv
-        
-        load_dotenv()
-        client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-        
-        # Preparar resumen de datos para el prompt
-        data_summary = f'''
-        Dataset: {len(filtered_data)} registros
-        
-        Estadísticas Clave:
-        - Ingresos Totales: ${filtered_data['Precio_Venta'].sum():,.2f}
-        - NPS Promedio: {filtered_data['NPS'].mean():.2f}
-        - Margen Promedio: {filtered_data['Margen_Utilidad'].mean():.2f}%
-        
-        Distribución por Canal:
-        {filtered_data['Canal'].value_counts().to_dict()}
-        
-        Top 5 Categorías por Ingresos:
-        {filtered_data.groupby('Categoria')['Precio_Venta'].sum().nlargest(5).to_dict()}
-        '''
-        
-        # Construir prompt
-        if custom_query:
-            query = custom_query
-        else:
-            query = analysis_type
-        
-        prompt = f'''
-        Eres un consultor senior experto en análisis de datos retail. 
-        
-        Contexto de Negocio:
-        TechLogistics S.A.S. es una empresa de retail tecnológico que enfrenta erosión de márgenes 
-        y caída en lealtad de clientes.
-        
-        Datos Disponibles:
-        {data_summary}
-        
-        Pregunta de Negocio:
-        {query}
-        
-        Proporciona un análisis estructurado en exactamente 3 párrafos:
-        
-        1. DIAGNÓSTICO: Qué indican los datos sobre la situación actual
-        2. ANÁLISIS DE CAUSA RAÍZ: Por qué está ocurriendo esto
-        3. RECOMENDACIÓN ESTRATÉGICA: Acciones concretas y priorizadas
-        
-        Sé específico, usa números de los datos, y enfócate en insights accionables.
-        '''
-        
-        # Llamada a API
-        chat_completion = client.chat.completions.create(
-            messages=[{"role": "user", "content": prompt}],
-            model="llama-3.1-70b-versatile",
-            temperature=0.7,
-            max_tokens=1500
-        )
-        
-        ai_response = chat_completion.choices[0].message.content
-        """
-        
-        # Por ahora, mostramos un placeholder
         with st.spinner("🤖 Analizando datos con IA..."):
             import time
             time.sleep(2)  # Simular procesamiento
@@ -1587,126 +1228,71 @@ with tab4:
             <strong>🤖 Análisis Generado por IA (Ejemplo - Placeholder)</strong><br><br>
             
             <strong>1. DIAGNÓSTICO</strong><br>
-            Los datos filtrados muestran una clara segmentación en el desempeño del negocio. 
-            Con un NPS promedio de 6.8 (por debajo del umbral saludable de 7+), y un 12.5% de ventas 
-            correspondientes a SKUs no catalogados que representan $247,000 en ingresos no controlados, 
-            la empresa enfrenta simultáneamente problemas de satisfacción del cliente y de control 
-            operativo. El margen de utilidad promedio del 18.3% está comprometido por 127 SKUs que 
-            operan en terreno negativo, concentrados principalmente en el canal Online.<br><br>
+            Los datos cargados muestran patrones interesantes en el desempeño del negocio.
+            Basándome en los archivos que subiste, puedo identificar áreas clave de mejora
+            en rentabilidad, satisfacción del cliente y eficiencia operativa.<br><br>
             
-            <strong>2. ANÁLISIS DE CAUSA RAÍZ</strong><br>
-            La correlación de -0.67 entre Brecha de Entrega y NPS en las ciudades de Medellín y Cali 
-            sugiere que los problemas logísticos son el principal detractor de satisfacción. Las bodegas 
-            BOD-003 y BOD-007 muestran una antigüedad de revisión de inventario superior a 45 días, 
-            lo cual se traduce en un 34% más de tickets de soporte comparado con bodegas que mantienen 
-            revisiones quincenales. Esta "operación a ciegas" genera un círculo vicioso: inventario 
-            desactualizado → promesas de entrega incumplibles → NPS bajo → pérdida de clientes recurrentes.<br><br>
+            <strong>2. ANÁLISIS</strong><br>
+            Las variables más relevantes para el análisis han sido identificadas.
+            Se recomienda prestar especial atención a las correlaciones encontradas
+            entre las diferentes dimensiones del negocio.<br><br>
             
-            <strong>3. RECOMENDACIÓN ESTRATÉGICA</strong><br>
-            <strong>Acción Inmediata (próximos 15 días):</strong> Implementar auditoría de los 10 SKUs con 
-            peor margen y ajustar precios; esto puede recuperar $85k mensuales. Simultáneamente, priorizar 
-            la catalogación de los SKUs fantasma que generan mayor ingreso (Top 20 = $180k del total). 
-            <strong>Mediano plazo (30-60 días):</strong> Cambiar operador logístico en Medellín-Bodega BOD-003 
-            donde la brecha de entrega promedio es de 8.2 días. <strong>Transformación estructural 
-            (90 días):</strong> Digitalizar el inventario con sistema de revisión automática cada 14 días 
-            máximo, lo que proyecta una reducción del 40% en tickets de soporte y mejora de +2.5 puntos 
-            en NPS, equivalente a $320k adicionales anuales por retención de clientes.
+            <strong>3. RECOMENDACIONES</strong><br>
+            Para implementar la integración con IA real, sigue las instrucciones en el
+            expander de abajo.
             </div>
             """, unsafe_allow_html=True)
-        
-        # Botón de descarga
-        st.download_button(
-            label="📥 Descargar Recomendaciones",
-            data="[Aquí irían las recomendaciones de IA en formato texto]",
-            file_name=f"recomendaciones_ia_{datetime.now().strftime('%Y%m%d')}.txt",
-            mime="text/plain"
-        )
     
-    st.markdown("---")
-    
-    # Sección de código de integración
+    # Código de integración
     with st.expander("👨‍💻 Ver Código de Integración con Groq"):
         st.code("""
-# Archivo: ai_integration.py
+# Instalación
+# pip install groq python-dotenv
 
+# Archivo .env
+GROQ_API_KEY=tu_api_key_aqui
+
+# Código de integración
 from groq import Groq
 import os
 from dotenv import load_dotenv
-import pandas as pd
 
-class AIAnalyzer:
-    def __init__(self):
-        load_dotenv()
-        self.client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-        self.model = "llama-3.1-70b-versatile"
-    
-    def prepare_data_summary(self, df):
-        '''Prepara un resumen estadístico de los datos'''
-        summary = f'''
-        Dataset: {len(df)} registros
-        Período: {df['Fecha_Venta'].min()} a {df['Fecha_Venta'].max()}
-        
-        KPIs Principales:
-        - Ingresos Totales: ${df['Precio_Venta'].sum():,.2f}
-        - NPS Promedio: {df['NPS'].mean():.2f}
-        - Margen Promedio: {df['Margen_Utilidad'].mean():.2f}%
-        - Brecha Entrega Promedio: {df['Brecha_Entrega'].mean():.1f} días
-        
-        Distribución por Canal:
-        {df['Canal'].value_counts().to_dict()}
-        
-        Top 5 Categorías:
-        {df.groupby('Categoria')['Precio_Venta'].sum().nlargest(5).to_dict()}
-        
-        Problemas Detectados:
-        - SKUs con margen negativo: {len(df[df['Margen_Utilidad'] < 0])}
-        - Ventas sin SKU catalogado: {len(df[df['SKU_No_Match'] == True])}
-        - Bodegas con >30 días sin revisión: {len(df[df['Edad_Inventario'] > 30].groupby('Bodega'))}
-        '''
-        return summary
-    
-    def analyze(self, df, query, analysis_type="general"):
-        '''Genera análisis con IA'''
-        data_summary = self.prepare_data_summary(df)
-        
-        prompt = f'''
-        Eres un consultor senior en análisis de datos para retail tecnológico.
-        
-        Contexto de Negocio:
-        TechLogistics S.A.S. enfrenta erosión de márgenes y caída en lealtad de clientes.
-        
-        Datos Disponibles:
-        {data_summary}
-        
-        Tipo de Análisis: {analysis_type}
-        Pregunta Específica: {query}
-        
-        Proporciona un análisis estructurado en exactamente 3 párrafos:
-        
-        1. DIAGNÓSTICO: Qué revelan los datos sobre la situación actual (con cifras específicas)
-        2. ANÁLISIS DE CAUSA RAÍZ: Por qué está ocurriendo esto (hipótesis basadas en datos)
-        3. RECOMENDACIÓN ESTRATÉGICA: Acciones concretas priorizadas (Quick Wins + Transformación)
-        
-        Usa números reales de los datos. Sé específico y accionable.
-        '''
-        
-        try:
-            chat_completion = self.client.chat.completions.create(
-                messages=[{"role": "user", "content": prompt}],
-                model=self.model,
-                temperature=0.7,
-                max_tokens=1500
-            )
-            
-            return chat_completion.choices[0].message.content
-        
-        except Exception as e:
-            return f"Error al generar análisis: {str(e)}"
+load_dotenv()
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-# Uso en Streamlit:
-# analyzer = AIAnalyzer()
-# response = analyzer.analyze(filtered_data, custom_query, analysis_type)
-# st.markdown(response)
+# Preparar resumen de datos
+data_summary = f'''
+Dataset: {len(filtered_data)} registros
+Columnas: {', '.join(filtered_data.columns)}
+
+Estadísticas:
+{filtered_data.describe().to_string()}
+'''
+
+# Prompt
+prompt = f'''
+Analiza estos datos de TechLogistics y genera recomendaciones:
+
+{data_summary}
+
+Pregunta: {custom_query or analysis_type}
+
+Estructura tu respuesta en 3 partes:
+1. DIAGNÓSTICO
+2. ANÁLISIS DE CAUSA RAÍZ
+3. RECOMENDACIONES ESTRATÉGICAS
+'''
+
+# Llamada a API
+response = client.chat.completions.create(
+    messages=[{"role": "user", "content": prompt}],
+    model="llama-3.1-70b-versatile",
+    temperature=0.7,
+    max_tokens=1500
+)
+
+ai_response = response.choices[0].message.content
+st.markdown(ai_response)
         """, language="python")
 
 # ================================
