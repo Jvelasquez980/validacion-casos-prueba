@@ -249,18 +249,64 @@ if feedback is not None:
 
 st.markdown("---")
 
-# Crear dataset integrado si hay datos disponibles
+# ================================
+# VALIDACIÓN Y CREACIÓN DE DATASET INTEGRADO
+# ================================
 main_data = None
+merge_errors = []
 
+# Función auxiliar para validar columnas
+def validate_columns(df, required_cols, df_name):
+    """Valida que un dataframe tenga las columnas requeridas"""
+    missing = [col for col in required_cols if col not in df.columns]
+    if missing:
+        return False, missing
+    return True, []
+
+# Intentar crear dataset integrado
 if transacciones is not None and inventario is not None and feedback is not None:
-    # Merge completo
-    main_data = transacciones.merge(inventario, on='SKU', how='left', suffixes=('', '_inv'))
-    main_data = main_data.merge(feedback, on='ID_Transaccion', how='left', suffixes=('', '_feed'))
-    st.info(f"📊 Dataset integrado creado: {len(main_data)} registros")
+    # Validar columnas necesarias
+    valid_trans, missing_trans = validate_columns(transacciones, ['SKU', 'ID_Transaccion'], 'Transacciones')
+    valid_inv, missing_inv = validate_columns(inventario, ['SKU'], 'Inventario')
+    valid_feed, missing_feed = validate_columns(feedback, ['ID_Transaccion'], 'Feedback')
+    
+    if valid_trans and valid_inv and valid_feed:
+        # Merge completo
+        try:
+            main_data = transacciones.merge(inventario, on='SKU', how='left', suffixes=('', '_inv'))
+            main_data = main_data.merge(feedback, on='ID_Transaccion', how='left', suffixes=('', '_feed'))
+            st.success(f"✅ Dataset integrado creado: {len(main_data)} registros")
+        except Exception as e:
+            merge_errors.append(f"Error al integrar datos: {str(e)}")
+            main_data = transacciones
+    else:
+        if not valid_trans:
+            merge_errors.append(f"❌ Transacciones: Faltan columnas {missing_trans}")
+        if not valid_inv:
+            merge_errors.append(f"❌ Inventario: Falta columna {missing_inv}")
+        if not valid_feed:
+            merge_errors.append(f"❌ Feedback: Falta columna {missing_feed}")
+        main_data = transacciones if transacciones is not None else inventario if inventario is not None else feedback
+
 elif transacciones is not None and inventario is not None:
     # Merge parcial (sin feedback)
-    main_data = transacciones.merge(inventario, on='SKU', how='left', suffixes=('', '_inv'))
-    st.info(f"📊 Dataset integrado creado (sin feedback): {len(main_data)} registros")
+    valid_trans, missing_trans = validate_columns(transacciones, ['SKU'], 'Transacciones')
+    valid_inv, missing_inv = validate_columns(inventario, ['SKU'], 'Inventario')
+    
+    if valid_trans and valid_inv:
+        try:
+            main_data = transacciones.merge(inventario, on='SKU', how='left', suffixes=('', '_inv'))
+            st.success(f"✅ Dataset integrado creado (sin feedback): {len(main_data)} registros")
+        except Exception as e:
+            merge_errors.append(f"Error al integrar datos: {str(e)}")
+            main_data = transacciones
+    else:
+        if not valid_trans:
+            merge_errors.append(f"❌ Transacciones: Falta columna {missing_trans}")
+        if not valid_inv:
+            merge_errors.append(f"❌ Inventario: Falta columna {missing_inv}")
+        main_data = transacciones if transacciones is not None else inventario
+
 elif transacciones is not None:
     # Solo transacciones
     main_data = transacciones
@@ -275,6 +321,33 @@ if main_data is None:
     if feedback is not None:
         main_data = feedback
         st.info(f"📊 Usando solo datos de feedback: {len(main_data)} registros")
+
+# Mostrar errores de validación si existen
+if merge_errors:
+    st.error("⚠️ **Problemas al integrar los datasets:**")
+    for error in merge_errors:
+        st.warning(error)
+    
+    st.markdown("""
+    <div class="warning-box">
+    <strong>💡 Columnas requeridas para integración completa:</strong><br>
+    <ul>
+        <li><strong>Transacciones:</strong> Debe tener columnas <code>SKU</code> y <code>ID_Transaccion</code></li>
+        <li><strong>Inventario:</strong> Debe tener columna <code>SKU</code></li>
+        <li><strong>Feedback:</strong> Debe tener columna <code>ID_Transaccion</code></li>
+    </ul>
+    <br>
+    <strong>Columnas actuales en tus archivos:</strong><br>
+    """, unsafe_allow_html=True)
+    
+    if transacciones is not None:
+        st.write(f"**Transacciones:** {', '.join(transacciones.columns.tolist())}")
+    if inventario is not None:
+        st.write(f"**Inventario:** {', '.join(inventario.columns.tolist())}")
+    if feedback is not None:
+        st.write(f"**Feedback:** {', '.join(feedback.columns.tolist())}")
+    
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # ================================
 # SIDEBAR
