@@ -250,104 +250,62 @@ if feedback is not None:
 st.markdown("---")
 
 # ================================
-# VALIDACIÓN Y CREACIÓN DE DATASET INTEGRADO
+# INFORMACIÓN DE COLUMNAS CARGADAS
+# ================================
+with st.expander("📋 Ver columnas de los archivos cargados", expanded=False):
+    if transacciones is not None:
+        st.write(f"**📦 Transacciones ({len(transacciones)} filas):**")
+        st.code(', '.join(transacciones.columns.tolist()))
+    if inventario is not None:
+        st.write(f"**📦 Inventario ({len(inventario)} filas):**")
+        st.code(', '.join(inventario.columns.tolist()))
+    if feedback is not None:
+        st.write(f"**📦 Feedback ({len(feedback)} filas):**")
+        st.code(', '.join(feedback.columns.tolist()))
+
+# ================================
+# CREACIÓN DE DATASET PRINCIPAL
 # ================================
 main_data = None
-merge_errors = []
 
-# Función auxiliar para validar columnas
-def validate_columns(df, required_cols, df_name):
-    """Valida que un dataframe tenga las columnas requeridas"""
-    missing = [col for col in required_cols if col not in df.columns]
-    if missing:
-        return False, missing
-    return True, []
-
-# Intentar crear dataset integrado
-if transacciones is not None and inventario is not None and feedback is not None:
-    # Validar columnas necesarias
-    valid_trans, missing_trans = validate_columns(transacciones, ['SKU', 'ID_Transaccion'], 'Transacciones')
-    valid_inv, missing_inv = validate_columns(inventario, ['SKU'], 'Inventario')
-    valid_feed, missing_feed = validate_columns(feedback, ['ID_Transaccion'], 'Feedback')
-    
-    if valid_trans and valid_inv and valid_feed:
-        # Merge completo
+# Función auxiliar para intentar merge seguro
+def safe_merge(df1, df2, on_col, df1_name, df2_name):
+    """Intenta hacer merge si la columna existe en ambos dataframes"""
+    if on_col in df1.columns and on_col in df2.columns:
         try:
-            main_data = transacciones.merge(inventario, on='SKU', how='left', suffixes=('', '_inv'))
-            main_data = main_data.merge(feedback, on='ID_Transaccion', how='left', suffixes=('', '_feed'))
-            st.success(f"✅ Dataset integrado creado: {len(main_data)} registros")
+            result = df1.merge(df2, on=on_col, how='left', suffixes=('', f'_{df2_name.lower()}'))
+            st.success(f"✅ Integrado: {df1_name} + {df2_name} usando columna '{on_col}'")
+            return result, True
         except Exception as e:
-            merge_errors.append(f"Error al integrar datos: {str(e)}")
-            main_data = transacciones
-    else:
-        if not valid_trans:
-            merge_errors.append(f"❌ Transacciones: Faltan columnas {missing_trans}")
-        if not valid_inv:
-            merge_errors.append(f"❌ Inventario: Falta columna {missing_inv}")
-        if not valid_feed:
-            merge_errors.append(f"❌ Feedback: Falta columna {missing_feed}")
-        main_data = transacciones if transacciones is not None else inventario if inventario is not None else feedback
+            st.warning(f"⚠️ No se pudo integrar {df1_name} con {df2_name}: {str(e)}")
+            return df1, False
+    return df1, False
 
-elif transacciones is not None and inventario is not None:
-    # Merge parcial (sin feedback)
-    valid_trans, missing_trans = validate_columns(transacciones, ['SKU'], 'Transacciones')
-    valid_inv, missing_inv = validate_columns(inventario, ['SKU'], 'Inventario')
+# Determinar dataset principal
+if transacciones is not None:
+    main_data = transacciones.copy()
+    dataset_name = "Transacciones"
     
-    if valid_trans and valid_inv:
-        try:
-            main_data = transacciones.merge(inventario, on='SKU', how='left', suffixes=('', '_inv'))
-            st.success(f"✅ Dataset integrado creado (sin feedback): {len(main_data)} registros")
-        except Exception as e:
-            merge_errors.append(f"Error al integrar datos: {str(e)}")
-            main_data = transacciones
-    else:
-        if not valid_trans:
-            merge_errors.append(f"❌ Transacciones: Falta columna {missing_trans}")
-        if not valid_inv:
-            merge_errors.append(f"❌ Inventario: Falta columna {missing_inv}")
-        main_data = transacciones if transacciones is not None else inventario
-
-elif transacciones is not None:
-    # Solo transacciones
-    main_data = transacciones
-    st.info(f"📊 Usando solo datos de transacciones: {len(main_data)} registros")
-elif inventario is not None:
-    # Solo inventario
-    main_data = inventario
-    st.info(f"📊 Usando solo datos de inventario: {len(main_data)} registros")
-
-# Si no hay datos integrados, usar el primer archivo disponible
-if main_data is None:
-    if feedback is not None:
-        main_data = feedback
-        st.info(f"📊 Usando solo datos de feedback: {len(main_data)} registros")
-
-# Mostrar errores de validación si existen
-if merge_errors:
-    st.error("⚠️ **Problemas al integrar los datasets:**")
-    for error in merge_errors:
-        st.warning(error)
-    
-    st.markdown("""
-    <div class="warning-box">
-    <strong>💡 Columnas requeridas para integración completa:</strong><br>
-    <ul>
-        <li><strong>Transacciones:</strong> Debe tener columnas <code>SKU</code> y <code>ID_Transaccion</code></li>
-        <li><strong>Inventario:</strong> Debe tener columna <code>SKU</code></li>
-        <li><strong>Feedback:</strong> Debe tener columna <code>ID_Transaccion</code></li>
-    </ul>
-    <br>
-    <strong>Columnas actuales en tus archivos:</strong><br>
-    """, unsafe_allow_html=True)
-    
-    if transacciones is not None:
-        st.write(f"**Transacciones:** {', '.join(transacciones.columns.tolist())}")
+    # Intentar merge con inventario
     if inventario is not None:
-        st.write(f"**Inventario:** {', '.join(inventario.columns.tolist())}")
-    if feedback is not None:
-        st.write(f"**Feedback:** {', '.join(feedback.columns.tolist())}")
+        main_data, _ = safe_merge(main_data, inventario, 'SKU', 'Transacciones', 'Inventario')
     
-    st.markdown("</div>", unsafe_allow_html=True)
+    # Intentar merge con feedback
+    if feedback is not None:
+        main_data, _ = safe_merge(main_data, feedback, 'ID_Transaccion', 'Transacciones', 'Feedback')
+        
+elif inventario is not None:
+    main_data = inventario.copy()
+    dataset_name = "Inventario"
+    st.info(f"📊 Usando datos de inventario como base: {len(main_data)} registros")
+    
+elif feedback is not None:
+    main_data = feedback.copy()
+    dataset_name = "Feedback"
+    st.info(f"📊 Usando datos de feedback como base: {len(main_data)} registros")
+
+if main_data is not None:
+    st.info(f"📊 Dataset principal: {len(main_data)} registros × {len(main_data.columns)} columnas")
 
 # ================================
 # SIDEBAR
