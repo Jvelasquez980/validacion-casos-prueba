@@ -316,62 +316,58 @@ with st.sidebar:
     
     st.header("🎛️ Filtros Globales")
     
-    # Filtro de fechas
-    if 'Fecha_Venta' in main_data.columns:
-        date_min = main_data['Fecha_Venta'].min()
-        date_max = main_data['Fecha_Venta'].max()
+    # Detectar columnas de fecha disponibles
+    date_columns = [col for col in main_data.columns if 'fecha' in col.lower() or 'date' in col.lower()]
+    date_range = None
+    date_filter_col = None
+    
+    if date_columns:
+        selected_date_col = st.selectbox("Filtrar por fecha:", ['Ninguno'] + date_columns)
+        if selected_date_col != 'Ninguno':
+            # Convertir a datetime si no lo es
+            main_data[selected_date_col] = pd.to_datetime(main_data[selected_date_col], errors='coerce')
+            date_min = main_data[selected_date_col].min()
+            date_max = main_data[selected_date_col].max()
+            
+            if pd.notna(date_min) and pd.notna(date_max):
+                date_range = st.date_input(
+                    f"Rango de {selected_date_col}",
+                    value=(date_min, date_max),
+                    min_value=date_min,
+                    max_value=date_max
+                )
+                date_filter_col = selected_date_col
+    
+    # Detectar columnas categóricas con pocos valores únicos (candidatas para filtros)
+    categorical_cols = []
+    for col in main_data.select_dtypes(include=['object']).columns:
+        unique_count = main_data[col].nunique()
+        if 2 <= unique_count <= 50:  # Filtrar columnas con entre 2 y 50 valores únicos
+            categorical_cols.append(col)
+    
+    # Crear filtros dinámicos
+    if categorical_cols:
+        st.subheader("Filtros Disponibles")
         
-        if pd.notna(date_min) and pd.notna(date_max):
-            date_range = st.date_input(
-                "Rango de Fechas",
-                value=(date_min, date_max),
-                min_value=date_min,
-                max_value=date_max
+        filters = {}
+        for col in categorical_cols[:5]:  # Limitar a 5 filtros para no saturar
+            unique_values = sorted(main_data[col].dropna().unique())
+            selected = st.multiselect(
+                f"📌 {col}",
+                options=unique_values,
+                default=None,
+                key=f"filter_{col}"
             )
-        else:
-            date_range = None
+            if selected:
+                filters[col] = selected
     else:
-        date_range = None
+        filters = {}
     
-    # Filtro de Categorías
-    if 'Categoria' in main_data.columns:
-        categorias = st.multiselect(
-            "Categorías",
-            options=sorted(main_data['Categoria'].dropna().unique()),
-            default=None
-        )
-    else:
-        categorias = None
-    
-    # Filtro de Ciudades
-    if 'Ciudad' in main_data.columns:
-        ciudades = st.multiselect(
-            "Ciudades",
-            options=sorted(main_data['Ciudad'].dropna().unique()),
-            default=None
-        )
-    else:
-        ciudades = None
-    
-    # Filtro de Canal
-    if 'Canal' in main_data.columns:
-        canal = st.multiselect(
-            "Canal de Venta",
-            options=sorted(main_data['Canal'].dropna().unique()),
-            default=None
-        )
-    else:
-        canal = None
-    
-    # Filtro de Bodegas
-    if 'Bodega' in main_data.columns:
-        bodegas = st.multiselect(
-            "Bodegas",
-            options=sorted(main_data['Bodega'].dropna().unique()),
-            default=None
-        )
-    else:
-        bodegas = None
+    # Variables para compatibilidad con código existente
+    categorias = filters.get('Categoria', None)
+    ciudades = filters.get('Ciudad', None)
+    canal = filters.get('Canal', None)
+    bodegas = filters.get('Bodega', None)
     
     st.markdown("---")
     
@@ -400,22 +396,13 @@ with st.sidebar:
         )
     
     # Aplicar filtros
-    filters = {}
-    if categorias:
-        filters['Categoria'] = categorias
-    if ciudades:
-        filters['Ciudad'] = ciudades
-    if canal:
-        filters['Canal'] = canal
-    if bodegas:
-        filters['Bodega'] = bodegas
-    
     filtered_data = filter_data(main_data, filters)
     
-    if 'Fecha_Venta' in filtered_data.columns and date_range is not None and len(date_range) == 2:
+    # Aplicar filtro de fecha si existe
+    if date_range is not None and len(date_range) == 2 and date_filter_col is not None:
         filtered_data = filtered_data[
-            (filtered_data['Fecha_Venta'] >= pd.to_datetime(date_range[0])) &
-            (filtered_data['Fecha_Venta'] <= pd.to_datetime(date_range[1]))
+            (filtered_data[date_filter_col] >= pd.to_datetime(date_range[0])) &
+            (filtered_data[date_filter_col] <= pd.to_datetime(date_range[1]))
         ]
     
     csv_filtered = filtered_data.to_csv(index=False).encode('utf-8')
