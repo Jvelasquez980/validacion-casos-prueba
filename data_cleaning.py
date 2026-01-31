@@ -316,7 +316,7 @@ def clean_feedback(df):
 # PIPELINE PRINCIPAL
 # ================================
 
-def clean_all_datasets(inv_path, trans_path, feed_path, output_dir='data/processed/'):
+def clean_all_datasets(inv_path, trans_path, feed_path, output_dir='data/'):
     """
     Orquesta todo el proceso de limpieza
     
@@ -377,7 +377,7 @@ def clean_all_datasets(inv_path, trans_path, feed_path, output_dir='data/process
 # LOGGING
 # ================================
 
-def log_cleaning_decisions(decisions_dict, output_path='data/processed/cleaning_decisions.txt'):
+def log_cleaning_decisions(decisions_dict, output_path='data/cleaning_decisions.txt'):
     """
     Documenta las decisiones de limpieza tomadas
     

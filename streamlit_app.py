@@ -78,13 +78,13 @@ st.markdown("""
 def load_data():
     """
     Carga los datasets limpios.
-    INSTRUCCIONES: Coloca tus archivos CSV limpios en la carpeta 'data/processed/'
+    INSTRUCCIONES: Coloca tus archivos CSV limpios en la carpeta 'data/'
     con los nombres: inventario_clean.csv, transacciones_clean.csv, feedback_clean.csv
     """
     try:
-        inventario = pd.read_csv('data/processed/inventario_clean.csv')
-        transacciones = pd.read_csv('data/processed/transacciones_clean.csv')
-        feedback = pd.read_csv('data/processed/feedback_clean.csv')
+        inventario = pd.read_csv('data/inventario_clean.csv')
+        transacciones = pd.read_csv('data/transacciones_clean.csv')
+        feedback = pd.read_csv('data/feedback_clean.csv')
         
         # Convertir columnas de fecha si existen
         date_columns_inv = ['Ultima_Revision', 'Fecha_Registro']
@@ -104,7 +104,7 @@ def load_data():
         ❌ Error al cargar los datos: {e}
         
         **Instrucciones:**
-        1. Crea la carpeta `data/processed/` en el directorio del proyecto
+        1. Crea la carpeta `data/` en el directorio del proyecto
         2. Coloca tus archivos CSV limpios con los nombres:
            - inventario_clean.csv
            - transacciones_clean.csv
@@ -116,10 +116,10 @@ def load_data():
 def load_integrated_data():
     """
     Carga el dataset integrado (después del merge).
-    INSTRUCCIONES: Coloca tu archivo integrado en 'data/processed/data_integrated.csv'
+    INSTRUCCIONES: Coloca tu archivo integrado en 'data/data_integrated.csv'
     """
     try:
-        integrated = pd.read_csv('data/processed/data_integrated.csv')
+        integrated = pd.read_csv('data/data_integrated.csv')
         
         # Convertir fechas
         date_columns = ['Fecha_Venta', 'Fecha_Entrega', 'Ultima_Revision']
