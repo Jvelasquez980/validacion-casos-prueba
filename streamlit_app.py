@@ -40,11 +40,28 @@ if inventario_file and transacciones_file and feedback_file:
     transacciones = pd.read_csv(transacciones_file)
     feedback = pd.read_csv(feedback_file)
     
-    # Merge básico
-    data = transacciones.merge(inventario, on='SKU', how='left')
-    data = data.merge(feedback, on='ID_Transaccion', how='left')
+    # Intentar merge si existen las columnas clave
+    data = transacciones.copy()
+    
+    # Merge con inventario
+    if 'SKU' in transacciones.columns and 'SKU' in inventario.columns:
+        data = data.merge(inventario, on='SKU', how='left', suffixes=('', '_inv'))
+    
+    # Merge con feedback
+    if 'ID_Transaccion' in data.columns and 'ID_Transaccion' in feedback.columns:
+        data = data.merge(feedback, on='ID_Transaccion', how='left', suffixes=('', '_feed'))
     
     st.success(f"✅ Datos cargados: {len(data):,} registros")
+    
+    # Mostrar columnas disponibles
+    with st.expander("📋 Ver columnas disponibles"):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.write("**Inventario:**", list(inventario.columns))
+        with col2:
+            st.write("**Transacciones:**", list(transacciones.columns))
+        with col3:
+            st.write("**Feedback:**", list(feedback.columns))
     
     # Tabs
     tab1, tab2, tab3 = st.tabs(["📊 Calidad", "🔍 Exploración", "💰 Análisis"])
