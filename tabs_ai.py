@@ -6,7 +6,11 @@ Interfaz para generar análisis con Groq/Llama-3
 import streamlit as st
 import os
 from datetime import datetime
-from dotenv import load_dotenv
+
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None
 
 
 def render_ai_recommendations(filtered_data):
@@ -35,7 +39,8 @@ def render_ai_recommendations(filtered_data):
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        load_dotenv()
+        if load_dotenv:
+            load_dotenv()
         env_key = os.getenv("GROQ_API_KEY")
 
         if env_key:
