@@ -1,441 +1,511 @@
 """
-Módulo de Limpieza de Datos
-TechLogistics S.A.S.
+data_cleaning.py
 
-Este módulo contiene todas las funciones necesarias para la limpieza
-y preprocesamiento de los datos.
+Goal:
+- Provide reusable, testable functions that Streamlit can import.
+- Keep notebooks for exploration; production logic lives here.
+
+This module includes:
+- Loading the three challenge CSVs
+- Light type normalization (dates/numerics/yes-no)
+- Data quality auditing + Health Score
+- Cleaning functions that return:
+    (clean_df, excluded_df, log_dict)
 """
 
-import pandas as pd
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable, Dict, List, Tuple
+
 import numpy as np
-from datetime import datetime
-import warnings
-warnings.filterwarnings('ignore')
+import pandas as pd
 
-# ================================
-# FUNCIONES DE AUDITORÍA
-# ================================
 
-def calculate_health_score(df, dataset_name):
+# -----------------------------
+# Loading
+# -----------------------------
+
+DATASETS = {
+    "inventario": "inventario_central_v2.csv",
+    "transacciones": "transacciones_logistica_v2.csv",
+    "feedback": "feedback_clientes_v2.csv",
+}
+
+
+def load_raw_data(data_dir: str | Path = "data") -> Dict[str, pd.DataFrame]:
     """
-    Calcula el Health Score de un dataset (0-100)
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        Dataset a evaluar
-    dataset_name : str
-        Nombre del dataset
-    
+    Load the 3 CSVs from a folder (default: ./data).
+
     Returns:
-    --------
-    dict : Métricas de calidad
+        {"inventario": df_inv, "transacciones": df_trx, "feedback": df_fb}
     """
-    total_cells = df.shape[0] * df.shape[1]
-    missing_cells = df.isnull().sum().sum()
-    completeness = (1 - missing_cells / total_cells) * 100
-    
-    duplicates = df.duplicated().sum()
-    uniqueness = (1 - duplicates / len(df)) * 100 if len(df) > 0 else 100
-    
-    # Score final (promedio ponderado)
-    health_score = (completeness * 0.6 + uniqueness * 0.4)
-    
-    return {
-        'dataset': dataset_name,
-        'health_score': round(health_score, 2),
-        'completeness': round(completeness, 2),
-        'uniqueness': round(uniqueness, 2),
-        'total_rows': len(df),
-        'total_columns': len(df.columns),
-        'missing_values': int(missing_cells),
-        'duplicates': int(duplicates)
+    data_dir = Path(data_dir)
+    out: Dict[str, pd.DataFrame] = {}
+    for k, fname in DATASETS.items():
+        path = data_dir / fname
+        out[k] = pd.read_csv(path)
+    return out
+
+
+# -----------------------------
+# Small helpers (normalization)
+# -----------------------------
+
+def _to_numeric(s: pd.Series) -> pd.Series:
+    return pd.to_numeric(s, errors="coerce")
+
+
+def parse_fecha_venta(df: pd.DataFrame, col: str = "Fecha_Venta") -> pd.DataFrame:
+    """
+    Notebook logic: Fecha_Venta appears as dd/mm/YYYY.
+    Creates a standardized datetime column: Fecha_Venta_dt
+    """
+    if col not in df.columns:
+        return df
+    df = df.copy()
+    df["Fecha_Venta_dt"] = pd.to_datetime(df[col], format="%d/%m/%Y", errors="coerce")
+    return df
+
+
+def normalize_yes_no(series: pd.Series) -> pd.Series:
+    """
+    Normalizes common yes/no values to {1,0} with NaN for unknown.
+    Includes the transformation seen in revision_data_feedback.ipynb
+    for Ticket_Soporte_Abierto (Sí/No, '1'/'0').
+    """
+    if series is None:
+        return series
+    s = series.astype("string").str.strip().str.lower()
+    mapping = {
+        "sí": 1, "si": 1, "s": 1, "yes": 1, "y": 1, "1": 1, "true": 1, "t": 1,
+        "no": 0, "n": 0, "0": 0, "false": 0, "f": 0,
+    }
+    out = s.map(mapping)
+    return pd.to_numeric(out, errors="coerce")
+
+
+def normalize_city(series: pd.Series) -> pd.Series:
+    """
+    Validation guide expects you to normalize city variants like MED/med/Medellín
+    into one canonical value.
+
+    This is intentionally conservative: extend the mapping as you discover variants.
+    """
+    if series is None:
+        return series
+    s = series.astype("string").str.strip()
+
+    # Lowercase for matching, but we output canonical "Title Case"
+    sl = s.str.lower()
+
+    mapping = {
+        "med": "Medellín",
+        "medellin": "Medellín",
+        "medellín": "Medellín",
+        "bog": "Bogotá",
+        "bogota": "Bogotá",
+        "bogotá": "Bogotá",
+        "cali": "Cali",
+        "ctg": "Cartagena",
+        "cartagena": "Cartagena",
+        # add more as needed
     }
 
-def generate_quality_report(df_before, df_after, dataset_name):
+    out = sl.map(mapping)
+    # if not in mapping, keep original trimmed value
+    out = out.fillna(s)
+    return out
+
+
+# -----------------------------
+# Outliers (IQR)
+# -----------------------------
+
+def iqr_bounds(series: pd.Series) -> tuple[float, float] | None:
+    s = _to_numeric(series).dropna()
+    if s.empty:
+        return None
+    q1 = s.quantile(0.25)
+    q3 = s.quantile(0.75)
+    iqr = q3 - q1
+    if iqr == 0:
+        return float(q1), float(q3)
+    lower = q1 - 1.5 * iqr
+    upper = q3 + 1.5 * iqr
+    return float(lower), float(upper)
+
+
+# -----------------------------
+# Auditing + Health Score
+# -----------------------------
+
+def audit_quality(
+    df: pd.DataFrame,
+    dataset_name: str,
+    critical_cols: List[str],
+    numeric_cols: List[str],
+    invalid_rules: Dict[str, Callable[[pd.DataFrame], pd.Series]] | None = None,
+) -> tuple[dict, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
-    Genera reporte comparativo antes/después de limpieza
-    
-    Parameters:
-    -----------
-    df_before : pd.DataFrame
-        Dataset original
-    df_after : pd.DataFrame
-        Dataset limpio
-    dataset_name : str
-        Nombre del dataset
-    
     Returns:
-    --------
-    dict : Reporte de cambios
+      summary: dict of KPIs (health score, null pct, dup, outliers, invalid)
+      nulls_table: DataFrame(column, null_pct)
+      outliers_table: DataFrame(column, outlier_count, outlier_pct, lower, upper)
+      excluded_rows_df: DataFrame of rows flagged as invalid/outlier with 'reason'
     """
-    before_score = calculate_health_score(df_before, dataset_name)
-    after_score = calculate_health_score(df_after, dataset_name)
-    
-    rows_removed = len(df_before) - len(df_after)
-    
-    return {
-        'dataset': dataset_name,
-        'before': before_score,
-        'after': after_score,
-        'rows_removed': rows_removed,
-        'improvement': round(after_score['health_score'] - before_score['health_score'], 2)
+    invalid_rules = invalid_rules or {}
+    df0 = df
+    n_rows, n_cols = df0.shape
+
+    # Nulls
+    null_pct_by_col = (df0.isna().mean() * 100).sort_values(ascending=False)
+    null_global_pct = (df0.isna().sum().sum() / (n_rows * n_cols) * 100) if (n_rows and n_cols) else 0.0
+
+    critical_present = [c for c in critical_cols if c in df0.columns]
+    critical_null_pct = float(null_pct_by_col[critical_present].mean()) if critical_present else 0.0
+
+    # Duplicates (full row)
+    dup_rows = int(df0.duplicated().sum())
+    dup_ratio = (dup_rows / n_rows * 100) if n_rows else 0.0
+
+    # Invalid rules
+    invalid_masks = []
+    excluded_parts = []
+
+    for rule_name, rule_fn in invalid_rules.items():
+        try:
+            mask = rule_fn(df0)
+        except Exception:
+            continue
+        if mask is not None and mask.any():
+            invalid_masks.append(mask.to_numpy())
+            tmp = df0.loc[mask].copy()
+            tmp["reason"] = f"invalid: {rule_name}"
+            tmp["dataset"] = dataset_name
+            excluded_parts.append(tmp)
+
+    invalid_mask = np.logical_or.reduce(invalid_masks) if invalid_masks else np.array([False] * n_rows)
+    invalid_rows_total = int(invalid_mask.sum())
+
+    # Outliers via IQR
+    outlier_any_mask = np.array([False] * n_rows)
+    outlier_meta = []
+
+    for col in [c for c in numeric_cols if c in df0.columns]:
+        bounds = iqr_bounds(df0[col])
+        if bounds is None:
+            continue
+        lower, upper = bounds
+        s = _to_numeric(df0[col])
+        mask = (s < lower) | (s > upper)
+        count = int(mask.sum())
+
+        outlier_meta.append({
+            "column": col,
+            "outlier_count": count,
+            "outlier_pct": (count / n_rows * 100) if n_rows else 0.0,
+            "lower": lower,
+            "upper": upper,
+        })
+
+        if count:
+            outlier_any_mask = outlier_any_mask | mask.fillna(False).to_numpy()
+            tmp = df0.loc[mask.fillna(False)].copy()
+            tmp["reason"] = f"outlier: {col}"
+            tmp["dataset"] = dataset_name
+            excluded_parts.append(tmp)
+
+    outlier_rows_total = int(outlier_any_mask.sum())
+    outlier_ratio = (outlier_rows_total / n_rows * 100) if n_rows else 0.0
+
+    # Health score (explainable & stable)
+    penalty_nulls = (null_global_pct * 0.4) + (critical_null_pct * 0.6)
+    penalty_dup = dup_ratio * 0.5
+    penalty_out = outlier_ratio * 0.7
+    penalty_inv = ((invalid_rows_total / n_rows * 100) * 1.5) if n_rows else 0.0
+
+    score = 100 - (penalty_nulls + penalty_dup + penalty_out + penalty_inv)
+    score = float(max(0, min(100, score)))
+
+    summary = {
+        "dataset": dataset_name,
+        "n_rows": int(n_rows),
+        "n_cols": int(n_cols),
+        "null_global_pct": float(null_global_pct),
+        "critical_null_pct": float(critical_null_pct),
+        "dup_rows": int(dup_rows),
+        "outlier_rows_total": int(outlier_rows_total),
+        "invalid_rows_total": int(invalid_rows_total),
+        "health_score": score,
     }
 
-# ================================
-# DETECCIÓN DE PROBLEMAS
-# ================================
+    nulls_table = null_pct_by_col.reset_index()
+    nulls_table.columns = ["column", "null_pct"]
 
-def detect_outliers(series, method='IQR', threshold=1.5):
-    """
-    Detecta outliers en una serie numérica
-    
-    Parameters:
-    -----------
-    series : pd.Series
-        Serie de datos numéricos
-    method : str
-        Método de detección ('IQR', 'zscore', 'percentile')
-    threshold : float
-        Umbral para considerar outlier
-    
-    Returns:
-    --------
-    pd.Series : Boolean mask de outliers
-    """
-    if method == 'IQR':
-        Q1 = series.quantile(0.25)
-        Q3 = series.quantile(0.75)
-        IQR = Q3 - Q1
-        lower_bound = Q1 - threshold * IQR
-        upper_bound = Q3 + threshold * IQR
-        return (series < lower_bound) | (series > upper_bound)
-    
-    elif method == 'zscore':
-        z_scores = np.abs((series - series.mean()) / series.std())
-        return z_scores > threshold
-    
-    elif method == 'percentile':
-        lower = series.quantile(0.01)
-        upper = series.quantile(0.99)
-        return (series < lower) | (series > upper)
-    
-    else:
-        raise ValueError("Método no reconocido. Usa 'IQR', 'zscore' o 'percentile'")
+    outliers_table = pd.DataFrame(outlier_meta)
+    if not outliers_table.empty:
+        outliers_table = outliers_table.sort_values("outlier_count", ascending=False)
 
-def detect_inconsistencies(df):
-    """
-    Detecta inconsistencias de tipo de datos
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        Dataset a analizar
-    
-    Returns:
-    --------
-    dict : Diccionario con columnas problemáticas
-    """
-    issues = {}
-    
-    for col in df.columns:
-        # Detectar mezcla de tipos
-        types = df[col].apply(type).unique()
-        if len(types) > 1:
-            issues[col] = {
-                'problem': 'mixed_types',
-                'types_found': [str(t) for t in types]
-            }
-    
-    return issues
+    excluded_rows_df = pd.concat(excluded_parts, ignore_index=True) if excluded_parts else pd.DataFrame()
 
-# ================================
-# TRATAMIENTO DE PROBLEMAS
-# ================================
+    return summary, nulls_table, outliers_table, excluded_rows_df
 
-def handle_outliers(series, strategy='cap', threshold=1.5):
-    """
-    Trata outliers según la estrategia seleccionada
-    
-    Parameters:
-    -----------
-    series : pd.Series
-        Serie de datos numéricos
-    strategy : str
-        Estrategia ('cap', 'remove', 'impute')
-    threshold : float
-        Umbral para detección
-    
-    Returns:
-    --------
-    pd.Series : Serie tratada
-    """
-    outliers = detect_outliers(series, method='IQR', threshold=threshold)
-    
-    if strategy == 'cap':
-        # Capear a percentiles 1 y 99
-        lower = series.quantile(0.01)
-        upper = series.quantile(0.99)
-        return series.clip(lower, upper)
-    
-    elif strategy == 'remove':
-        # Marcar para eliminación (retorna mask)
-        return ~outliers
-    
-    elif strategy == 'impute':
-        # Imputar con mediana
-        median_val = series.median()
-        series_copy = series.copy()
-        series_copy[outliers] = median_val
-        return series_copy
-    
-    else:
-        raise ValueError("Estrategia no reconocida. Usa 'cap', 'remove' o 'impute'")
 
-def impute_missing(series, strategy='median'):
-    """
-    Imputa valores faltantes
-    
-    Parameters:
-    -----------
-    series : pd.Series
-        Serie con valores faltantes
-    strategy : str
-        Estrategia ('mean', 'median', 'mode', 'ffill')
-    
-    Returns:
-    --------
-    pd.Series : Serie con valores imputados
-    """
-    if strategy == 'mean':
-        return series.fillna(series.mean())
-    elif strategy == 'median':
-        return series.fillna(series.median())
-    elif strategy == 'mode':
-        return series.fillna(series.mode()[0] if len(series.mode()) > 0 else series.median())
-    elif strategy == 'ffill':
-        return series.fillna(method='ffill')
-    else:
-        raise ValueError("Estrategia no reconocida")
+# -----------------------------
+# Invalid rules (based on challenge + validation)
+# -----------------------------
 
-# ================================
-# LIMPIEZA POR DATASET
-# ================================
+def invalid_rules_inventario() -> Dict[str, Callable[[pd.DataFrame], pd.Series]]:
+    rules = {}
 
-def clean_inventario(df):
-    """
-    Limpia el dataset de inventario
-    
-    Acciones:
-    - Corregir tipos de datos
-    - Tratar outliers en costos
-    - Resolver existencias negativas
-    """
-    df_clean = df.copy()
-    
-    # EJEMPLO DE LIMPIEZA - ADAPTAR SEGÚN TUS DATOS
-    
-    # 1. Convertir fechas
-    if 'Ultima_Revision' in df_clean.columns:
-        df_clean['Ultima_Revision'] = pd.to_datetime(df_clean['Ultima_Revision'], errors='coerce')
-    
-    # 2. Tratar costos atípicos
-    if 'Costo_Unitario' in df_clean.columns:
-        # Eliminar costos < $0.50
-        df_clean = df_clean[df_clean['Costo_Unitario'] >= 0.50]
-        # Capear costos extremos
-        df_clean['Costo_Unitario'] = handle_outliers(df_clean['Costo_Unitario'], strategy='cap')
-    
-    # 3. Resolver existencias negativas
-    if 'Existencias' in df_clean.columns:
-        df_clean.loc[df_clean['Existencias'] < 0, 'Existencias'] = 0
-    
-    # 4. Remover duplicados
-    df_clean = df_clean.drop_duplicates()
-    
-    return df_clean
+    if "Stock_Actual" in rules:  # no-op, keep pattern
+        pass
 
-def clean_transacciones(df):
-    """
-    Limpia el dataset de transacciones
-    
-    Acciones:
-    - Estandarizar formatos de fecha
-    - Tratar outliers de tiempo de entrega
-    - Validar integridad referencial
-    """
-    df_clean = df.copy()
-    
-    # EJEMPLO DE LIMPIEZA - ADAPTAR SEGÚN TUS DATOS
-    
-    # 1. Estandarizar fechas
-    date_columns = ['Fecha_Venta', 'Fecha_Entrega']
-    for col in date_columns:
-        if col in df_clean.columns:
-            df_clean[col] = pd.to_datetime(df_clean[col], errors='coerce', dayfirst=True)
-    
-    # 2. Tratar tiempos de entrega outliers
-    if 'Tiempo_Entrega' in df_clean.columns:
-        df_clean['Tiempo_Entrega'] = handle_outliers(df_clean['Tiempo_Entrega'], strategy='cap')
-    
-    # 3. Remover registros con fechas inválidas
-    df_clean = df_clean.dropna(subset=['Fecha_Venta'])
-    
-    return df_clean
+    def stock_negative(df: pd.DataFrame) -> pd.Series:
+        if "Stock_Actual" not in df.columns:
+            return pd.Series([False] * len(df), index=df.index)
+        return _to_numeric(df["Stock_Actual"]) < 0
 
-def clean_feedback(df):
-    """
-    Limpia el dataset de feedback
-    
-    Acciones:
-    - Eliminar duplicados
-    - Validar rangos de edad
-    - Normalizar escala NPS
-    """
-    df_clean = df.copy()
-    
-    # EJEMPLO DE LIMPIEZA - ADAPTAR SEGÚN TUS DATOS
-    
-    # 1. Eliminar duplicados exactos
-    df_clean = df_clean.drop_duplicates(subset=['ID_Transaccion', 'NPS'], keep='first')
-    
-    # 2. Validar edades
-    if 'Edad' in df_clean.columns:
-        # Imputar edades imposibles con la mediana
-        df_clean.loc[df_clean['Edad'] > 120, 'Edad'] = np.nan
-        df_clean.loc[df_clean['Edad'] < 18, 'Edad'] = np.nan
-        df_clean['Edad'] = impute_missing(df_clean['Edad'], strategy='median')
-    
-    # 3. Validar escala NPS
-    if 'NPS' in df_clean.columns:
-        df_clean = df_clean[(df_clean['NPS'] >= 0) & (df_clean['NPS'] <= 10)]
-    
-    return df_clean
+    rules["stock_negative"] = stock_negative
+    return rules
 
-# ================================
-# PIPELINE PRINCIPAL
-# ================================
 
-def clean_all_datasets(inv_path, trans_path, feed_path, output_dir='data/'):
-    """
-    Orquesta todo el proceso de limpieza
-    
-    Parameters:
-    -----------
-    inv_path : str
-        Ruta al CSV de inventario
-    trans_path : str
-        Ruta al CSV de transacciones
-    feed_path : str
-        Ruta al CSV de feedback
-    output_dir : str
-        Directorio de salida
-    
-    Returns:
-    --------
-    tuple : (inventario_clean, transacciones_clean, feedback_clean, reports)
-    """
-    import os
-    
-    # Crear directorio de salida si no existe
-    os.makedirs(output_dir, exist_ok=True)
-    
-    print("📦 Cargando datasets originales...")
-    inv_original = pd.read_csv(inv_path)
-    trans_original = pd.read_csv(trans_path)
-    feed_original = pd.read_csv(feed_path)
-    
-    print("🧹 Limpiando datasets...")
-    inv_clean = clean_inventario(inv_original)
-    trans_clean = clean_transacciones(trans_original)
-    feed_clean = clean_feedback(feed_original)
-    
-    print("📊 Generando reportes de calidad...")
-    reports = {
-        'inventario': generate_quality_report(inv_original, inv_clean, 'Inventario'),
-        'transacciones': generate_quality_report(trans_original, trans_clean, 'Transacciones'),
-        'feedback': generate_quality_report(feed_original, feed_clean, 'Feedback')
+def invalid_rules_transacciones(now: pd.Timestamp | None = None) -> Dict[str, Callable[[pd.DataFrame], pd.Series]]:
+    now = now or pd.Timestamp.now()
+    rules = {}
+
+    def future_sales(df: pd.DataFrame) -> pd.Series:
+        if "Fecha_Venta_dt" not in df.columns and "Fecha_Venta" in df.columns:
+            tmp = parse_fecha_venta(df)
+            d = tmp["Fecha_Venta_dt"]
+        else:
+            d = df.get("Fecha_Venta_dt")
+        if d is None:
+            return pd.Series([False] * len(df), index=df.index)
+        return pd.to_datetime(d, errors="coerce") > now
+
+    rules["future_sales"] = future_sales
+    return rules
+
+
+def invalid_rules_feedback() -> Dict[str, Callable[[pd.DataFrame], pd.Series]]:
+    rules = {}
+
+    def age_impossible(df: pd.DataFrame) -> pd.Series:
+        if "Edad_Cliente" not in df.columns:
+            return pd.Series([False] * len(df), index=df.index)
+        age = _to_numeric(df["Edad_Cliente"])
+        # conservative bounds (tune if the dataset is different)
+        return (age < 10) | (age > 110)
+
+    def nps_out_of_range(df: pd.DataFrame) -> pd.Series:
+        if "Satisfaccion_NPS" not in df.columns:
+            return pd.Series([False] * len(df), index=df.index)
+        nps = _to_numeric(df["Satisfaccion_NPS"])
+        # NPS usually -100..100
+        return (nps < -100) | (nps > 100)
+
+    rules["age_impossible"] = age_impossible
+    rules["nps_out_of_range"] = nps_out_of_range
+    return rules
+
+
+# -----------------------------
+# Cleaning functions (return clean + excluded + log)
+# -----------------------------
+
+def clean_inventario(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, dict]:
+    df0 = df.copy()
+    excluded_parts = []
+
+    # Normalize categorical text
+    if "Ciudad" in df0.columns:
+        df0["Ciudad"] = normalize_city(df0["Ciudad"])
+    if "Bodega_Origen" in df0.columns:
+        df0["Bodega_Origen"] = df0["Bodega_Origen"].astype("string").str.strip()
+
+    # Coerce numerics
+    for col in ["Stock_Actual", "Costo_Unitario_USD", "Punto_Reorden", "Lead_Time_Dias"]:
+        if col in df0.columns:
+            df0[col] = _to_numeric(df0[col])
+
+    # Invalid: stock negative (exclude)
+    inv_rules = invalid_rules_inventario()
+    mask_neg = inv_rules["stock_negative"](df0)
+    if mask_neg.any():
+        tmp = df0.loc[mask_neg].copy()
+        tmp["reason"] = "invalid: stock_negative"
+        excluded_parts.append(tmp)
+        df0 = df0.loc[~mask_neg].copy()
+
+    excluded = pd.concat(excluded_parts, ignore_index=True) if excluded_parts else pd.DataFrame()
+    log = {
+        "dataset": "inventario",
+        "rows_in": int(len(df)),
+        "rows_out": int(len(df0)),
+        "excluded_rows": int(len(excluded)),
+        "notes": "Types normalized; negative stock excluded (see excluded reasons).",
     }
-    
-    print("💾 Guardando datasets limpios...")
-    inv_clean.to_csv(f'{output_dir}inventario_clean.csv', index=False)
-    trans_clean.to_csv(f'{output_dir}transacciones_clean.csv', index=False)
-    feed_clean.to_csv(f'{output_dir}feedback_clean.csv', index=False)
-    
-    # Guardar reporte
-    report_df = pd.DataFrame([reports['inventario'], reports['transacciones'], reports['feedback']])
-    report_df.to_csv(f'{output_dir}quality_report.csv', index=False)
-    
-    print("✅ ¡Limpieza completada!")
-    print(f"   - Inventario: {len(inv_clean):,} registros ({reports['inventario']['rows_removed']} eliminados)")
-    print(f"   - Transacciones: {len(trans_clean):,} registros ({reports['transacciones']['rows_removed']} eliminados)")
-    print(f"   - Feedback: {len(feed_clean):,} registros ({reports['feedback']['rows_removed']} eliminados)")
-    
-    return inv_clean, trans_clean, feed_clean, reports
+    return df0, excluded, log
 
-# ================================
-# LOGGING
-# ================================
 
-def log_cleaning_decisions(decisions_dict, output_path='data/cleaning_decisions.txt'):
+def clean_transacciones(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, dict]:
+    df0 = df.copy()
+    excluded_parts = []
+
+    # Fecha parsing (from notebook)
+    df0 = parse_fecha_venta(df0, col="Fecha_Venta")
+
+    # Normalize city fields
+    for col in ["Ciudad_Destino", "Ciudad_Origen"]:
+        if col in df0.columns:
+            df0[col] = normalize_city(df0[col])
+
+    # Coerce numerics
+    for col in ["Cantidad_Vendida", "Precio_Venta_Final", "Costo_Envio", "Tiempo_Entrega"]:
+        if col in df0.columns:
+            df0[col] = _to_numeric(df0[col])
+
+    # Invalid: future sales (exclude)
+    trx_rules = invalid_rules_transacciones()
+    mask_future = trx_rules["future_sales"](df0)
+    if mask_future.any():
+        tmp = df0.loc[mask_future].copy()
+        tmp["reason"] = "invalid: future_sales"
+        excluded_parts.append(tmp)
+        df0 = df0.loc[~mask_future].copy()
+
+    excluded = pd.concat(excluded_parts, ignore_index=True) if excluded_parts else pd.DataFrame()
+    log = {
+        "dataset": "transacciones",
+        "rows_in": int(len(df)),
+        "rows_out": int(len(df0)),
+        "excluded_rows": int(len(excluded)),
+        "notes": "Fecha_Venta parsed to Fecha_Venta_dt; future sales excluded.",
+    }
+    return df0, excluded, log
+
+
+def clean_feedback(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, dict]:
+    df0 = df.copy()
+    excluded_parts = []
+
+    # Transform Ticket_Soporte_Abierto (from revision_data_feedback.ipynb)
+    if "Ticket_Soporte_Abierto" in df0.columns:
+        df0["Ticket_Soporte_Abierto"] = normalize_yes_no(df0["Ticket_Soporte_Abierto"])
+
+    # Coerce numerics
+    for col in ["Rating_Producto", "Rating_Logistica", "Satisfaccion_NPS", "Edad_Cliente"]:
+        if col in df0.columns:
+            df0[col] = _to_numeric(df0[col])
+
+    # Drop duplicated Transaccion_ID if present (keep first; log excluded)
+    if "Transaccion_ID" in df0.columns:
+        dup_mask = df0.duplicated(subset=["Transaccion_ID"], keep="first")
+        if dup_mask.any():
+            tmp = df0.loc[dup_mask].copy()
+            tmp["reason"] = "duplicate: Transaccion_ID"
+            excluded_parts.append(tmp)
+            df0 = df0.loc[~dup_mask].copy()
+
+    # Invalid: impossible ages / NPS out of expected range
+    fb_rules = invalid_rules_feedback()
+    mask_age = fb_rules["age_impossible"](df0)
+    if mask_age.any():
+        tmp = df0.loc[mask_age].copy()
+        tmp["reason"] = "invalid: age_impossible"
+        excluded_parts.append(tmp)
+        df0 = df0.loc[~mask_age].copy()
+
+    mask_nps = fb_rules["nps_out_of_range"](df0)
+    if mask_nps.any():
+        tmp = df0.loc[mask_nps].copy()
+        tmp["reason"] = "invalid: nps_out_of_range"
+        excluded_parts.append(tmp)
+        df0 = df0.loc[~mask_nps].copy()
+
+    excluded = pd.concat(excluded_parts, ignore_index=True) if excluded_parts else pd.DataFrame()
+    log = {
+        "dataset": "feedback",
+        "rows_in": int(len(df)),
+        "rows_out": int(len(df0)),
+        "excluded_rows": int(len(excluded)),
+        "notes": "Ticket_Soporte_Abierto normalized to 0/1; duplicate Transaccion_ID removed; invalid ages/NPS excluded.",
+    }
+    return df0, excluded, log
+
+
+def clean_all(raw: Dict[str, pd.DataFrame]) -> Tuple[Dict[str, pd.DataFrame], dict]:
     """
-    Documenta las decisiones de limpieza tomadas
-    
-    Parameters:
-    -----------
-    decisions_dict : dict
-        Diccionario con decisiones tomadas
-    output_path : str
-        Ruta del archivo de log
+    Cleans all datasets and returns:
+      cleaned: dict of cleaned dfs
+      report: dict with 'excluded' dfs and 'logs'
     """
-    with open(output_path, 'w', encoding='utf-8') as f:
-        f.write("="*80 + "\n")
-        f.write("DOCUMENTACIÓN DE DECISIONES DE LIMPIEZA DE DATOS\n")
-        f.write(f"Fecha: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write("="*80 + "\n\n")
-        
-        for dataset, decisions in decisions_dict.items():
-            f.write(f"\n{dataset.upper()}\n")
-            f.write("-"*80 + "\n")
-            for decision, justification in decisions.items():
-                f.write(f"\n{decision}:\n")
-                f.write(f"  {justification}\n")
+    cleaned: Dict[str, pd.DataFrame] = {}
+    excluded: Dict[str, pd.DataFrame] = {}
+    logs: Dict[str, dict] = {}
 
-# ================================
-# EJEMPLO DE USO
-# ================================
+    cleaned["inventario"], excluded["inventario"], logs["inventario"] = clean_inventario(raw["inventario"])
+    cleaned["transacciones"], excluded["transacciones"], logs["transacciones"] = clean_transacciones(raw["transacciones"])
+    cleaned["feedback"], excluded["feedback"], logs["feedback"] = clean_feedback(raw["feedback"])
 
-if __name__ == "__main__":
-    # Rutas de archivos (ADAPTAR SEGÚN TU ESTRUCTURA)
-    inv_path = 'data/raw/inventario_central_v2.csv'
-    trans_path = 'data/raw/transacciones_logistica_v2.csv'
-    feed_path = 'data/raw/feedback_clientes_v2.csv'
-    
-    # Ejecutar limpieza
-    inv_clean, trans_clean, feed_clean, reports = clean_all_datasets(
-        inv_path, trans_path, feed_path
+    report = {"excluded": excluded, "logs": logs}
+    return cleaned, report
+
+
+# -----------------------------
+# Auditing helpers for Streamlit
+# -----------------------------
+
+AUDIT_CONFIG = {
+    "inventario": {
+        "critical": ["SKU_ID", "Costo_Unitario_USD", "Stock_Actual"],
+        "numeric": ["Costo_Unitario_USD", "Stock_Actual", "Punto_Reorden", "Lead_Time_Dias"],
+    },
+    "transacciones": {
+        "critical": ["Transaccion_ID", "SKU_ID", "Fecha_Venta", "Tiempo_Entrega", "Cantidad_Vendida", "Precio_Venta_Final"],
+        "numeric": ["Tiempo_Entrega", "Cantidad_Vendida", "Precio_Venta_Final", "Costo_Envio"],
+    },
+    "feedback": {
+        "critical": ["Transaccion_ID", "Satisfaccion_NPS"],
+        "numeric": ["Satisfaccion_NPS", "Edad_Cliente", "Rating_Producto", "Rating_Logistica"],
+    },
+}
+
+
+def audit_dataset(df: pd.DataFrame, key: str) -> dict:
+    """
+    Runs audit_quality for a single dataset key in {'inventario','transacciones','feedback'}
+    and returns a dict with summary/nulls/outliers/excluded.
+    """
+    cfg = AUDIT_CONFIG[key]
+    if key == "inventario":
+        rules = invalid_rules_inventario()
+        name = "Inventario"
+    elif key == "transacciones":
+        rules = invalid_rules_transacciones()
+        name = "Transacciones"
+    else:
+        rules = invalid_rules_feedback()
+        name = "Feedback"
+
+    summary, nulls, outliers, excluded = audit_quality(
+        df=df,
+        dataset_name=name,
+        critical_cols=cfg["critical"],
+        numeric_cols=cfg["numeric"],
+        invalid_rules=rules,
     )
-    
-    # Documentar decisiones
-    decisions = {
-        'Inventario': {
-            'Costos < $0.50 eliminados': 'Costos extremadamente bajos indican error de sistema',
-            'Existencias negativas → 0': 'Existencias negativas son imposibles físicamente',
-            'Outliers de costo capeados': 'Percentil 99 usado para evitar sesgo en análisis'
-        },
-        'Transacciones': {
-            'Tiempos de entrega > 100 días capeados': 'Outliers extremos sesgan correlaciones',
-            'SKUs sin match mantenidos': 'Representan ventas reales, útil para análisis de riesgo',
-            'Fechas estandarizadas': 'Formato YYYY-MM-DD para consistencia'
-        },
-        'Feedback': {
-            'Duplicados eliminados': 'ID_Transaccion + NPS idénticos son redundantes',
-            'Edades > 120 imputadas con mediana': 'Mediana más robusta que media ante outliers',
-            'NPS fuera de rango [0-10] eliminados': 'Valores inválidos por error de sistema'
-        }
-    }
-    
-    log_cleaning_decisions(decisions)
-    
-    print("\n📄 Reporte de calidad:")
-    print(pd.DataFrame([reports['inventario'], reports['transacciones'], reports['feedback']]))
+    return {"summary": summary, "nulls": nulls, "outliers": outliers, "excluded": excluded}
+
+
+def audit_before_after(raw: Dict[str, pd.DataFrame], cleaned: Dict[str, pd.DataFrame]) -> tuple[dict, dict]:
+    """
+    Convenience function: run audits for raw and cleaned datasets.
+    Returns (aud_before, aud_after)
+    """
+    before = {k: audit_dataset(raw[k], k) for k in raw.keys()}
+    after = {k: audit_dataset(cleaned[k], k) for k in cleaned.keys()}
+    return before, after
