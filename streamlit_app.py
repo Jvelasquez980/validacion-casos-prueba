@@ -205,6 +205,8 @@ if inventario_file and transacciones_file and feedback_file:
                 inventario = limpiar_atipicos_costo_unitario(inventario, cost_replacement)
                 # AHORA imputar Categoría (basándose en Costo limpio)
                 inventario = imputar_valores_columna_categoria(inventario, category_replacement)
+                # 👉 GUARDAR EN SESSION_STATE
+                st.session_state.inventario_clean = inventario
                 st.success("✅ Inventario limpiado exitosamente")
                 st.info(f"Stock: {stock_replacement} | Costo: {cost_replacement} | Categoría: {category_replacement}")
             except Exception as e:
@@ -244,6 +246,8 @@ if inventario_file and transacciones_file and feedback_file:
                 transacciones = reemplazar_outliers_tiempo_entrega_real(transacciones, tiempo_replacement)
                 transacciones = imputar_costo_envio(transacciones, costo_replacement)
                 transacciones = imputar_estado_envio(transacciones, estado_replacement)
+                # 👉 GUARDAR EN SESSION_STATE
+                st.session_state.transacciones_clean = transacciones
                 st.success("✅ Transacciones limpias exitosamente")
                 st.info(f"Tiempo: {tiempo_replacement} | Costo: {costo_replacement} | Estado: {estado_replacement}")
             except Exception as e:
@@ -274,6 +278,8 @@ if inventario_file and transacciones_file and feedback_file:
                 feedback = manejar_outliers_edad_cliente(feedback, edad_replacement)
                 feedback = imputar_valores_comentario_texto(feedback)
                 feedback = imputar_valores_recomienda_marca(feedback)
+                # 👉 GUARDAR EN SESSION_STATE
+                st.session_state.feedback_clean = feedback
                 st.success("✅ Feedback limpiado exitosamente")
                 st.info(f"Rating: {rating_replacement} | Edad: {edad_replacement}")
             except Exception as e:
@@ -286,19 +292,24 @@ if inventario_file and transacciones_file and feedback_file:
     
     if st.button("🔗 Realizar Merge", key="do_merge"):
         try:
-            data = transacciones.copy()
+            # 👉 USAR DATOS LIMPIOS si existen, sino usar originales
+            trx_para_merge = st.session_state.get('transacciones_clean', transacciones)
+            inv_para_merge = st.session_state.get('inventario_clean', inventario)
+            fb_para_merge = st.session_state.get('feedback_clean', feedback)
+            
+            data = trx_para_merge.copy()
 
             # Merge con inventario
-            if 'SKU_ID' in transacciones.columns and 'SKU_ID' in inventario.columns:
-                data = data.merge(inventario, on='SKU_ID', how='inner', suffixes=('', '_inv'))
-            elif 'SKU' in transacciones.columns and 'SKU' in inventario.columns:
-                data = data.merge(inventario, on='SKU', how='inner', suffixes=('', '_inv'))
+            if 'SKU_ID' in trx_para_merge.columns and 'SKU_ID' in inv_para_merge.columns:
+                data = data.merge(inv_para_merge, on='SKU_ID', how='inner', suffixes=('', '_inv'))
+            elif 'SKU' in trx_para_merge.columns and 'SKU' in inv_para_merge.columns:
+                data = data.merge(inv_para_merge, on='SKU', how='inner', suffixes=('', '_inv'))
 
             # Merge con feedback
-            if 'Transaccion_ID' in data.columns and 'Transaccion_ID' in feedback.columns:
-                data = data.merge(feedback, on='Transaccion_ID', how='inner', suffixes=('', '_fb'))
-            elif 'ID_Transaccion' in data.columns and 'ID_Transaccion' in feedback.columns:
-                data = data.merge(feedback, on='ID_Transaccion', how='inner', suffixes=('', '_fb'))
+            if 'Transaccion_ID' in data.columns and 'Transaccion_ID' in fb_para_merge.columns:
+                data = data.merge(fb_para_merge, on='Transaccion_ID', how='inner', suffixes=('', '_fb'))
+            elif 'ID_Transaccion' in data.columns and 'ID_Transaccion' in fb_para_merge.columns:
+                data = data.merge(fb_para_merge, on='ID_Transaccion', how='inner', suffixes=('', '_fb'))
             
             st.session_state.data_merged = data
             st.success(f"✅ Merge completado: {len(data):,} registros")
