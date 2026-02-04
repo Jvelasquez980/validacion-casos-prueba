@@ -11,6 +11,7 @@ def corregir_canal_venta(df):
     df['Canal_Venta'] = df['Canal_Venta'].replace({ # Consideramos que es importante manteneer App como un canal dee venta debido a que nos puede dar informacion relevante con el uso de la aplicacion y la necesidad de mantenerla.
         'WhatsApp': 'Online'
     })
+    return df
 
 def corregir_valores_negativos_cantidad_vendida(df):
     df['Cantidad_vendida'] = df['Cantidad_vendida'].abs() # Encontramos valores negativos en cantidad vendida, los cuales no tienen sentido en este contexto, por lo que tomamos su valor absoluto.
