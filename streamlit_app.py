@@ -39,8 +39,11 @@ from limpieza_datos_feedback import (
 from integracion_datos import integrar_datos, crear_metricas_nuevas
 
 
-# Configuración
-st.set_page_config(page_title="TechLogistics - Análisis", layout="wide")
+# 👉 Usar Session State para mantener datos
+if 'data_merged' not in st.session_state:
+    st.session_state.data_merged = None
+if 'data_with_metrics' not in st.session_state:
+    st.session_state.data_with_metrics = None
 
 # Título
 st.title("📊 TechLogistics - Sistema de Análisis")
@@ -273,34 +276,54 @@ if inventario_file and transacciones_file and feedback_file:
             except Exception as e:
                 st.error(f"❌ Error en limpieza de feedback: {str(e)}")
 
-    # Intentar merge si existen las columnas clave
-    data = transacciones.copy()
-
-    # Merge con inventario
-    if 'SKU_ID' in transacciones.columns and 'SKU_ID' in inventario.columns:
-        data = data.merge(inventario, on='SKU_ID', how='inner', suffixes=('', '_inv'))
-    elif 'SKU' in transacciones.columns and 'SKU' in inventario.columns:
-        data = data.merge(inventario, on='SKU', how='inner', suffixes=('', '_inv'))
-
-    # Merge con feedback
-    if 'Transaccion_ID' in data.columns and 'Transaccion_ID' in feedback.columns:
-        data = data.merge(feedback, on='Transaccion_ID', how='inner', suffixes=('', '_fb'))
-    elif 'ID_Transaccion' in data.columns and 'ID_Transaccion' in feedback.columns:
-        data = data.merge(feedback, on='ID_Transaccion', how='inner', suffixes=('', '_fb'))
-
     st.markdown("---")
-    st.header("📊 Integración y Métricas")
+    st.header("📊 Merge de Datos")
     
-    # Botón para integrar datos
-    if st.button("🔗 Integrar Datos Completos", key="integrate"):
+    st.write("Realiza el merge de los datos limpios cuando estés listo.")
+    
+    if st.button("🔗 Realizar Merge", key="do_merge"):
         try:
-            data = integrar_datos(transacciones, feedback, inventario)
-            data = crear_metricas_nuevas(data)
-            st.success(f"✅ Datos integrados: {len(data)} registros")
-        except Exception as e:
-            st.error(f"❌ Error en integración: {str(e)}")
+            data = transacciones.copy()
 
-    st.success(f"✅ Datos procesados: {len(data):,} registros")
+            # Merge con inventario
+            if 'SKU_ID' in transacciones.columns and 'SKU_ID' in inventario.columns:
+                data = data.merge(inventario, on='SKU_ID', how='inner', suffixes=('', '_inv'))
+            elif 'SKU' in transacciones.columns and 'SKU' in inventario.columns:
+                data = data.merge(inventario, on='SKU', how='inner', suffixes=('', '_inv'))
+
+            # Merge con feedback
+            if 'Transaccion_ID' in data.columns and 'Transaccion_ID' in feedback.columns:
+                data = data.merge(feedback, on='Transaccion_ID', how='inner', suffixes=('', '_fb'))
+            elif 'ID_Transaccion' in data.columns and 'ID_Transaccion' in feedback.columns:
+                data = data.merge(feedback, on='ID_Transaccion', how='inner', suffixes=('', '_fb'))
+            
+            st.session_state.data_merged = data
+            st.success(f"✅ Merge completado: {len(data):,} registros")
+        except Exception as e:
+            st.error(f"❌ Error en merge: {str(e)}")
+    
+    # Si hay datos merged, mostrar opción de crear métricas
+    if st.session_state.data_merged is not None:
+        st.markdown("---")
+        st.header("📈 Métricas Derivadas")
+        
+        if st.button("📊 Crear Métricas Derivadas", key="create_metrics"):
+            try:
+                data_with_metrics = st.session_state.data_merged.copy()
+                data_with_metrics = crear_metricas_nuevas(data_with_metrics)
+                st.session_state.data_with_metrics = data_with_metrics
+                st.success(f"✅ Métricas generadas exitosamente")
+            except Exception as e:
+                st.error(f"❌ Error en generación de métricas: {str(e)}")
+        
+        # Usar datos con métricas si existen, sino usar merged
+        data = st.session_state.data_with_metrics if st.session_state.data_with_metrics is not None else st.session_state.data_merged
+    else:
+        data = None
+
+    # Si no hay merge, crear dataframe vacío para evitar errores
+    if data is None:
+        data = pd.DataFrame()
 
     # Mostrar columnas disponibles
     with st.expander("📋 Ver columnas disponibles"):
@@ -313,7 +336,7 @@ if inventario_file and transacciones_file and feedback_file:
             st.write("**Feedback:**", list(feedback.columns))
 
     # Tabs
-    tab1, tab2, tab3 = st.tabs(["📊 Calidad", "🔍 Exploración", "💰 Análisis"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 Calidad", "🔍 Exploración", "🔗 Merge", "💰 Análisis"])
 
     # TAB 1: Calidad
     with tab1:
@@ -416,8 +439,37 @@ if inventario_file and transacciones_file and feedback_file:
             fig = px.bar(data['Categoria'].value_counts())
             st.plotly_chart(fig, use_container_width=True)
 
-    # TAB 3: Análisis
+    # TAB 3: Merge (NUEVA PESTAÑA)
     with tab3:
+        st.subheader("Visualización del Merge")
+        
+        if st.session_state.data_merged is None:
+            st.info("👈 Realiza el merge en la sección anterior para ver los datos")
+        else:
+            st.success(f"✅ Datos merged: {len(st.session_state.data_merged):,} registros")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Filas Transacciones", len(transacciones))
+            with col2:
+                st.metric("Filas Merge", len(st.session_state.data_merged))
+            
+            st.markdown("**Vista Previa del Merge**")
+            st.dataframe(st.session_state.data_merged.head(20))
+            
+            st.markdown("**Información del Merge**")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write(f"**Columnas:** {len(st.session_state.data_merged.columns)}")
+            with col2:
+                st.write(f"**Nulos totales:** {st.session_state.data_merged.isna().sum().sum()}")
+            
+            # Descargar merged
+            csv = st.session_state.data_merged.to_csv(index=False).encode('utf-8')
+            st.download_button("📥 Descargar Datos Merged", csv, "datos_merged.csv", "text/csv")
+
+    # TAB 4: Análisis (antes era TAB 3)
+    with tab4:
         st.subheader("Análisis Estratégico")
 
         # Mostrar métricas derivadas si existen
