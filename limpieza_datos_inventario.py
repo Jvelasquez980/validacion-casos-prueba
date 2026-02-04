@@ -10,9 +10,9 @@ def imputar_valores_columna_stock_actual(df,remplazo):
         valor_reemplazo = df['Stock_Actual'].mode()[0]
     else:
         raise ValueError("El parámetro 'remplazo' debe ser 'media', 'mediana' o 'moda'.")
-    df['Stock_Sctual'].fillna(valor_reemplazo, inplace=True)
-    df['Stock_Sctual'] = df['Stock_Sctual'].astype(int)
-    df['Stock_Sctual'] = df['Stock_Sctual'].abs()
+    df['Stock_Actual'].fillna(valor_reemplazo, inplace=True)
+    df['Stock_Actual'] = df['Stock_Actual'].astype(int)
+    df['Stock_Actual'] = df['Stock_Actual'].abs()
     return df
 
 def imputar_valores_columna_lead_time_dias(df):
@@ -50,11 +50,11 @@ def limpiar_atipicos_costo_unitario(df,remplazo):
 
     for categoria_unica in categorias_unicas:
         # Identificamos valores que superan el límite superior
-        mask_outliers_altos = (df['categoria'] == categoria_unica) & (df['costo_unitario'] > LIMITE_SUPERIOR)
+        mask_outliers_altos = (df['Categoria'] == categoria_unica) & (df['Costo_Unitario_USD'] > LIMITE_SUPERIOR)
         num_outliers_altos = mask_outliers_altos.sum()
 
         # Identificamos valores que están por debajo del límite inferior
-        mask_outliers_bajos = (df['categoria'] == categoria_unica) & (df['costo_unitario'] < LIMITE_INFERIOR)
+        mask_outliers_bajos = (df['Categoria'] == categoria_unica) & (df['Costo_Unitario_USD'] < LIMITE_INFERIOR)
         num_outliers_bajos = mask_outliers_bajos.sum()
 
         # Obtenemos la moda de la categoría
@@ -69,10 +69,10 @@ def limpiar_atipicos_costo_unitario(df,remplazo):
 
         if num_outliers_altos > 0:
             # Reemplazamos valores altos con la moda
-            df.loc[mask_outliers_altos, 'costo_unitario'] = valor_remplazo
+            df.loc[mask_outliers_altos, 'Costo_Unitario_USD'] = valor_remplazo
         if num_outliers_bajos > 0:
             # Reemplazamos valores bajos con la moda
-            df.loc[mask_outliers_bajos, 'costo_unitario'] = valor_remplazo
+            df.loc[mask_outliers_bajos, 'Costo_Unitario_USD'] = valor_remplazo
     return df
 
 def imputar_valores_columna_categoria(df, remplazo):
