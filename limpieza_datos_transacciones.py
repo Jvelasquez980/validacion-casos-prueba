@@ -14,7 +14,7 @@ def corregir_canal_venta(df):
     return df
 
 def corregir_valores_negativos_cantidad_vendida(df):
-    df['Cantidad_vendida'] = df['Cantidad_vendida'].abs() # Encontramos valores negativos en cantidad vendida, los cuales no tienen sentido en este contexto, por lo que tomamos su valor absoluto.
+    df['Cantidad_Vendida'] = df['Cantidad_Vendida'].abs() # Encontramos valores negativos en cantidad vendida, los cuales no tienen sentido en este contexto, por lo que tomamos su valor absoluto.
     return df
 
 
