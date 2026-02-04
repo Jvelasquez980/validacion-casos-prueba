@@ -196,11 +196,14 @@ if inventario_file and transacciones_file and feedback_file:
         
         if st.button("🔧 Limpiar Inventario", key="clean_inv"):
             try:
-                inventario = imputar_valores_columna_stock_actual(inventario, stock_replacement)
+                # Orden correcto: normalizar → tipos → outliers → imputar
+                inventario = corregir_nombres_bodega_origen(inventario)
                 inventario = imputar_valores_columna_lead_time_dias(inventario)
                 inventario = corregir_tipos_datos_punto_reorden(inventario)
-                inventario = corregir_nombres_bodega_origen(inventario)
+                inventario = imputar_valores_columna_stock_actual(inventario, stock_replacement)
+                # IMPORTANTE: Limpiar outliers de Costo ANTES de imputar Categoría
                 inventario = limpiar_atipicos_costo_unitario(inventario, cost_replacement)
+                # AHORA imputar Categoría (basándose en Costo limpio)
                 inventario = imputar_valores_columna_categoria(inventario, category_replacement)
                 st.success("✅ Inventario limpiado exitosamente")
                 st.info(f"Stock: {stock_replacement} | Costo: {cost_replacement} | Categoría: {category_replacement}")
