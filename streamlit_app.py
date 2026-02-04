@@ -159,6 +159,14 @@ if inventario_file and transacciones_file and feedback_file:
     transacciones = pd.read_csv(transacciones_file)
     feedback = pd.read_csv(feedback_file)
 
+    # 👉 Si existen datos limpios en session_state, usarlos
+    if 'inventario_clean' in st.session_state:
+        inventario = st.session_state.inventario_clean
+    if 'transacciones_clean' in st.session_state:
+        transacciones = st.session_state.transacciones_clean
+    if 'feedback_clean' in st.session_state:
+        feedback = st.session_state.feedback_clean
+
     st.success(f"✅ Datos cargados: {len(inventario)} inv | {len(transacciones)} trx | {len(feedback)} fb")
 
     # 👉 NUEVA SECCIÓN: Limpieza de Datos
