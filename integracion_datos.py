@@ -29,3 +29,24 @@ def integrar_datos(df_transaccion, df_feedback, df_inventario):
     print(f"Columnas totales: {len(df_merged.columns)}")
     
     return df_merged
+
+def crear_metricas_nuevas(df_merged):
+    """
+    Crea nuevas métricas en el dataframe integrado.
+    
+    Parámetros:
+    -----------
+    df_merged : DataFrame
+        DataFrame integrado con todas las fuentes de datos
+        
+    Retorna:
+    --------
+    DataFrame : Dataframe con nuevas métricas añadidas
+    """
+    df_merged['Rating_Servicio'] = (df_merged['Rating_Producto'] * df_merged['Rating_Logistica'])/5 # El calculo de esta metrica es basado en el maximo puntaje de ambos,  este siendo 5 en ambos valores
+    # Lo que nos da un puntaje maximo de 25, por lo que lo dividimos entre 5 para normalizarlo a una escala de 0 a 5.
+
+    return df_merged
+
+    
+    # Métrica

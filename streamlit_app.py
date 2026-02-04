@@ -10,6 +10,34 @@ import plotly.express as px
 # 👉 NUEVO: importar auditoría del módulo
 from data_cleaning import audit_quality
 
+# 👉 Importar funciones de limpieza específicas
+from limpieza_datos_transacciones import (
+    corregir_nombres_ciudad_destino,
+    corregir_canal_venta,
+    corregir_valores_negativos_cantidad_vendida,
+    reemplazar_outliers_tiempo_entrega_real,
+    imputar_costo_envio,
+    imputar_estado_envio
+)
+
+from limpieza_datos_inventario import (
+    imputar_valores_columna_stock_actual,
+    imputar_valores_columna_lead_time_dias,
+    corregir_tipos_datos_punto_reorden,
+    corregir_nombres_bodega_origen,
+    limpiar_atipicos_costo_unitario,
+    imputar_valores_columna_categoria
+)
+
+from limpieza_datos_feedback import (
+    manejar_outliers_rating_producto,
+    manejar_outliers_edad_cliente,
+    imputar_valores_comentario_texto,
+    imputar_valores_recomienda_marca
+)
+
+from integracion_datos import integrar_datos, crear_metricas_nuevas
+
 
 # Configuración
 st.set_page_config(page_title="TechLogistics - Análisis", layout="wide")
@@ -128,18 +156,79 @@ if inventario_file and transacciones_file and feedback_file:
     transacciones = pd.read_csv(transacciones_file)
     feedback = pd.read_csv(feedback_file)
 
+    st.success(f"✅ Datos cargados: {len(inventario)} inv | {len(transacciones)} trx | {len(feedback)} fb")
+
+    # 👉 NUEVA SECCIÓN: Limpieza de Datos
+    st.markdown("---")
+    st.header("🧹 Limpieza de Datos")
+    
+    col_clean1, col_clean2, col_clean3 = st.columns(3)
+    
+    with col_clean1:
+        if st.button("🔧 Limpiar Inventario", key="clean_inv"):
+            try:
+                inventario = imputar_valores_columna_stock_actual(inventario, 'media')
+                inventario = imputar_valores_columna_lead_time_dias(inventario)
+                inventario = corregir_tipos_datos_punto_reorden(inventario)
+                inventario = corregir_nombres_bodega_origen(inventario)
+                inventario = limpiar_atipicos_costo_unitario(inventario, 'Mediana')
+                inventario = imputar_valores_columna_categoria(inventario, 'Mediana')
+                st.success("✅ Inventario limpiado")
+            except Exception as e:
+                st.error(f"❌ Error en limpieza de inventario: {str(e)}")
+    
+    with col_clean2:
+        if st.button("🔧 Limpiar Transacciones", key="clean_trx"):
+            try:
+                transacciones = corregir_nombres_ciudad_destino(transacciones)
+                transacciones = corregir_canal_venta(transacciones)
+                transacciones = corregir_valores_negativos_cantidad_vendida(transacciones)
+                transacciones = reemplazar_outliers_tiempo_entrega_real(transacciones, 'Mediana')
+                transacciones = imputar_costo_envio(transacciones, 'Mediana')
+                transacciones = imputar_estado_envio(transacciones, 'Moda')
+                st.success("✅ Transacciones limpias")
+            except Exception as e:
+                st.error(f"❌ Error en limpieza de transacciones: {str(e)}")
+    
+    with col_clean3:
+        if st.button("🔧 Limpiar Feedback", key="clean_fb"):
+            try:
+                feedback = manejar_outliers_rating_producto(feedback, 'Mediana')
+                feedback = manejar_outliers_edad_cliente(feedback, 'Mediana')
+                feedback = imputar_valores_comentario_texto(feedback)
+                feedback = imputar_valores_recomienda_marca(feedback)
+                st.success("✅ Feedback limpiado")
+            except Exception as e:
+                st.error(f"❌ Error en limpieza de feedback: {str(e)}")
+
     # Intentar merge si existen las columnas clave
     data = transacciones.copy()
 
     # Merge con inventario
-    if 'SKU' in transacciones.columns and 'SKU' in inventario.columns:
-        data = data.merge(inventario, on='SKU', how='left', suffixes=('', '_inv'))
+    if 'SKU_ID' in transacciones.columns and 'SKU_ID' in inventario.columns:
+        data = data.merge(inventario, on='SKU_ID', how='inner', suffixes=('', '_inv'))
+    elif 'SKU' in transacciones.columns and 'SKU' in inventario.columns:
+        data = data.merge(inventario, on='SKU', how='inner', suffixes=('', '_inv'))
 
     # Merge con feedback
-    if 'ID_Transaccion' in data.columns and 'ID_Transaccion' in feedback.columns:
-        data = data.merge(feedback, on='ID_Transaccion', how='left', suffixes=('', '_feed'))
+    if 'Transaccion_ID' in data.columns and 'Transaccion_ID' in feedback.columns:
+        data = data.merge(feedback, on='Transaccion_ID', how='inner', suffixes=('', '_fb'))
+    elif 'ID_Transaccion' in data.columns and 'ID_Transaccion' in feedback.columns:
+        data = data.merge(feedback, on='ID_Transaccion', how='inner', suffixes=('', '_fb'))
 
-    st.success(f"✅ Datos cargados: {len(data):,} registros")
+    st.markdown("---")
+    st.header("📊 Integración y Métricas")
+    
+    # Botón para integrar datos
+    if st.button("🔗 Integrar Datos Completos", key="integrate"):
+        try:
+            data = integrar_datos(transacciones, feedback, inventario)
+            data = crear_metricas_nuevas(data)
+            st.success(f"✅ Datos integrados: {len(data)} registros")
+        except Exception as e:
+            st.error(f"❌ Error en integración: {str(e)}")
+
+    st.success(f"✅ Datos procesados: {len(data):,} registros")
 
     # Mostrar columnas disponibles
     with st.expander("📋 Ver columnas disponibles"):
@@ -259,6 +348,23 @@ if inventario_file and transacciones_file and feedback_file:
     with tab3:
         st.subheader("Análisis Estratégico")
 
+        # Mostrar métricas derivadas si existen
+        if 'Rating_Servicio' in data.columns:
+            st.markdown("**📈 Métrica Integrada: Rating de Servicio**")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Rating Servicio Promedio", f"{data['Rating_Servicio'].mean():.2f}")
+            with col2:
+                rating_alto = len(data[data['Rating_Servicio'] >= 4])
+                st.metric("Clientes Satisfechos (Rating >= 4)", f"{rating_alto:,}")
+            with col3:
+                rating_bajo = len(data[data['Rating_Servicio'] < 2])
+                st.metric("Clientes Insatisfechos (Rating < 2)", f"{rating_bajo:,}")
+            
+            # Gráfico Rating Servicio
+            fig = px.histogram(data, x='Rating_Servicio', nbins=20, title="Distribución Rating de Servicio")
+            st.plotly_chart(fig, use_container_width=True)
+
         # Calcular métricas básicas
         if 'Precio_Venta' in data.columns and 'Costo_Unitario' in data.columns:
             data['Margen'] = (data['Precio_Venta'] - data['Costo_Unitario']) / data['Precio_Venta'] * 100
@@ -275,16 +381,17 @@ if inventario_file and transacciones_file and feedback_file:
             fig = px.histogram(data, x='Margen', nbins=50)
             st.plotly_chart(fig, use_container_width=True)
 
-        if 'NPS' in data.columns:
+        if 'Satisfaccion_NPS' in data.columns or 'NPS' in data.columns:
+            nps_col = 'Satisfaccion_NPS' if 'Satisfaccion_NPS' in data.columns else 'NPS'
             st.markdown("**2. Satisfacción del Cliente**")
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("NPS Promedio", f"{data['NPS'].mean():.2f}")
+                st.metric("NPS Promedio", f"{data[nps_col].mean():.2f}")
             with col2:
-                detractores = len(data[data['NPS'] <= 6])
+                detractores = len(data[data[nps_col] <= 6])
                 st.metric("Detractores", f"{detractores:,}")
             with col3:
-                promotores = len(data[data['NPS'] >= 9])
+                promotores = len(data[data[nps_col] >= 9])
                 st.metric("Promotores", f"{promotores:,}")
 
         # Descargar resultados
