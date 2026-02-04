@@ -7,7 +7,7 @@ def imputar_valores_columna_stock_actual(df,remplazo):
     elif remplazo == 'mediana':
         valor_reemplazo = df['Stock_Actual'].median()
     elif remplazo == 'moda':
-        valor_reemplazo = df['Stock_Sctual'].mode()[0]
+        valor_reemplazo = df['Stock_Actual'].mode()[0]
     else:
         raise ValueError("El parámetro 'remplazo' debe ser 'media', 'mediana' o 'moda'.")
     df['Stock_Sctual'].fillna(valor_reemplazo, inplace=True)

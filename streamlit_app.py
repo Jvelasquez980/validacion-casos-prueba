@@ -162,42 +162,114 @@ if inventario_file and transacciones_file and feedback_file:
     st.markdown("---")
     st.header("🧹 Limpieza de Datos")
     
-    col_clean1, col_clean2, col_clean3 = st.columns(3)
+    # Crear tabs para opciones de limpieza
+    clean_tab1, clean_tab2, clean_tab3 = st.tabs(["📦 Inventario", "🚚 Transacciones", "💬 Feedback"])
     
-    with col_clean1:
+    with clean_tab1:
+        st.subheader("Opciones de Limpieza - Inventario")
+        
+        col_opt1, col_opt2, col_opt3 = st.columns(3)
+        
+        with col_opt1:
+            stock_replacement = st.selectbox(
+                "Método para Stock_Actual",
+                ["media", "mediana", "moda"],
+                key="inv_stock"
+            )
+        
+        with col_opt2:
+            cost_replacement = st.selectbox(
+                "Método para Costo_Unitario (atípicos)",
+                ["Moda", "Mediana", "Promedio"],
+                key="inv_cost"
+            )
+        
+        with col_opt3:
+            category_replacement = st.selectbox(
+                "Método para Categoría (valores '???')",
+                ["Mediana", "Moda", "Promedio"],
+                key="inv_category"
+            )
+        
         if st.button("🔧 Limpiar Inventario", key="clean_inv"):
             try:
-                inventario = imputar_valores_columna_stock_actual(inventario, 'media')
+                inventario = imputar_valores_columna_stock_actual(inventario, stock_replacement)
                 inventario = imputar_valores_columna_lead_time_dias(inventario)
                 inventario = corregir_tipos_datos_punto_reorden(inventario)
                 inventario = corregir_nombres_bodega_origen(inventario)
-                inventario = limpiar_atipicos_costo_unitario(inventario, 'Mediana')
-                inventario = imputar_valores_columna_categoria(inventario, 'Mediana')
-                st.success("✅ Inventario limpiado")
+                inventario = limpiar_atipicos_costo_unitario(inventario, cost_replacement)
+                inventario = imputar_valores_columna_categoria(inventario, category_replacement)
+                st.success("✅ Inventario limpiado exitosamente")
+                st.info(f"Stock: {stock_replacement} | Costo: {cost_replacement} | Categoría: {category_replacement}")
             except Exception as e:
                 st.error(f"❌ Error en limpieza de inventario: {str(e)}")
     
-    with col_clean2:
+    with clean_tab2:
+        st.subheader("Opciones de Limpieza - Transacciones")
+        
+        col_opt1, col_opt2, col_opt3 = st.columns(3)
+        
+        with col_opt1:
+            tiempo_replacement = st.selectbox(
+                "Método para Tiempo_Entrega_Real (outliers)",
+                ["Mediana", "Media", "Limite", "Moda"],
+                key="trx_tiempo"
+            )
+        
+        with col_opt2:
+            costo_replacement = st.selectbox(
+                "Método para Costo_Envio (nulos)",
+                ["Mediana", "Media", "Moda"],
+                key="trx_costo"
+            )
+        
+        with col_opt3:
+            estado_replacement = st.selectbox(
+                "Método para Estado_Envio (nulos)",
+                ["Moda", "Mediana", "Media"],
+                key="trx_estado"
+            )
+        
         if st.button("🔧 Limpiar Transacciones", key="clean_trx"):
             try:
                 transacciones = corregir_nombres_ciudad_destino(transacciones)
                 transacciones = corregir_canal_venta(transacciones)
                 transacciones = corregir_valores_negativos_cantidad_vendida(transacciones)
-                transacciones = reemplazar_outliers_tiempo_entrega_real(transacciones, 'Mediana')
-                transacciones = imputar_costo_envio(transacciones, 'Mediana')
-                transacciones = imputar_estado_envio(transacciones, 'Moda')
-                st.success("✅ Transacciones limpias")
+                transacciones = reemplazar_outliers_tiempo_entrega_real(transacciones, tiempo_replacement)
+                transacciones = imputar_costo_envio(transacciones, costo_replacement)
+                transacciones = imputar_estado_envio(transacciones, estado_replacement)
+                st.success("✅ Transacciones limpias exitosamente")
+                st.info(f"Tiempo: {tiempo_replacement} | Costo: {costo_replacement} | Estado: {estado_replacement}")
             except Exception as e:
                 st.error(f"❌ Error en limpieza de transacciones: {str(e)}")
     
-    with col_clean3:
+    with clean_tab3:
+        st.subheader("Opciones de Limpieza - Feedback")
+        
+        col_opt1, col_opt2 = st.columns(2)
+        
+        with col_opt1:
+            rating_replacement = st.selectbox(
+                "Método para Rating_Producto (outliers)",
+                ["Mediana", "Moda", "Media"],
+                key="fb_rating"
+            )
+        
+        with col_opt2:
+            edad_replacement = st.selectbox(
+                "Método para Edad_Cliente (outliers)",
+                ["Mediana", "Moda", "Media"],
+                key="fb_edad"
+            )
+        
         if st.button("🔧 Limpiar Feedback", key="clean_fb"):
             try:
-                feedback = manejar_outliers_rating_producto(feedback, 'Mediana')
-                feedback = manejar_outliers_edad_cliente(feedback, 'Mediana')
+                feedback = manejar_outliers_rating_producto(feedback, rating_replacement)
+                feedback = manejar_outliers_edad_cliente(feedback, edad_replacement)
                 feedback = imputar_valores_comentario_texto(feedback)
                 feedback = imputar_valores_recomienda_marca(feedback)
-                st.success("✅ Feedback limpiado")
+                st.success("✅ Feedback limpiado exitosamente")
+                st.info(f"Rating: {rating_replacement} | Edad: {edad_replacement}")
             except Exception as e:
                 st.error(f"❌ Error en limpieza de feedback: {str(e)}")
 
