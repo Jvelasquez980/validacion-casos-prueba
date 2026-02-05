@@ -43,9 +43,22 @@ def crear_metricas_nuevas(df_merged):
     --------
     DataFrame : Dataframe con nuevas métricas añadidas
     """
-    df_merged['Rating_Servicio'] = (df_merged['Rating_Producto'] * df_merged['Rating_Logistica'])/5 # El calculo de esta metrica es basado en el maximo puntaje de ambos,  este siendo 5 en ambos valores
-    # Lo que nos da un puntaje maximo de 25, por lo que lo dividimos entre 5 para normalizarlo a una escala de 0 a 5.
-
+    df_merged = df_merged.copy()
+    
+    # Crear Rating_Servicio si existen las columnas necesarias
+    if 'Rating_Producto' in df_merged.columns and 'Rating_Logistica' in df_merged.columns:
+        df_merged['Rating_Servicio'] = (df_merged['Rating_Producto'] * df_merged['Rating_Logistica'])/5
+    elif 'Rating_Producto' in df_merged.columns:
+        df_merged['Rating_Servicio'] = df_merged['Rating_Producto']
+    
+    # Crear Margen si existen las columnas necesarias
+    if 'Precio_Venta_Final' in df_merged.columns and 'Costo_Unitario_USD' in df_merged.columns:
+        # Evitar división por cero
+        df_merged['Margen'] = ((df_merged['Precio_Venta_Final'] - df_merged['Costo_Unitario_USD']) / df_merged['Precio_Venta_Final'] * 100).fillna(0)
+    elif 'Costo_Unitario_USD' in df_merged.columns:
+        # Si no hay precio de venta, calcular con costo
+        df_merged['Margen'] = df_merged['Costo_Unitario_USD']
+    
     return df_merged
 
     

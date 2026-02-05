@@ -46,7 +46,7 @@ def limpiar_atipicos_costo_unitario(df,remplazo):
         moda = df[df['Categoria'] == categoria_unica]['Costo_Unitario_USD'].mode()[0]
         mediana = df[df['Categoria'] == categoria_unica]['Costo_Unitario_USD'].median()
         promedio = df[df['Categoria'] == categoria_unica]['Costo_Unitario_USD'].mean()
-        medidas_catg[categoria_unica] = {'Moda': moda, 'Mediana': mediana, 'Promedio': promedio}
+        medidas_catg[categoria_unica] = {'moda': moda, 'mediana': mediana, 'media': promedio}
 
     for categoria_unica in categorias_unicas:
         # Identificamos valores que superan el límite superior
@@ -58,12 +58,12 @@ def limpiar_atipicos_costo_unitario(df,remplazo):
         num_outliers_bajos = mask_outliers_bajos.sum()
 
         # Obtenemos la moda de la categoría
-        if remplazo == 'Moda':
-            valor_remplazo = medidas_catg[categoria_unica]['Moda']
-        elif remplazo == "Mediana":
-            valor_remplazo = medidas_catg[categoria_unica]['Mediana']
-        elif remplazo == "Promedio":
-            valor_remplazo = medidas_catg[categoria_unica]['Promedio']
+        if remplazo == 'moda':
+            valor_remplazo = medidas_catg[categoria_unica]['moda']
+        elif remplazo == "mediana":
+            valor_remplazo = medidas_catg[categoria_unica]['mediana']
+        elif remplazo == "media":
+            valor_remplazo = medidas_catg[categoria_unica]['media']
         else:
             raise ValueError("El parámetro 'remplazo' debe ser 'media', 'mediana' o 'moda'.")
 
@@ -87,8 +87,8 @@ def imputar_valores_columna_categoria(df, remplazo):
     Returns:
         DataFrame con categorías imputadas
     """
-    if remplazo not in ['Moda', 'Mediana', 'Promedio']:
-        raise ValueError("El parámetro 'remplazo' debe ser 'Moda', 'Mediana' o 'Promedio'.")
+    if remplazo not in ['moda', 'mediana', 'media']:
+        raise ValueError("El parámetro 'remplazo' debe ser 'moda', 'mediana' o 'media'.")
     
     # Obtenemos categorías únicas excluyendo '???'
     categorias_unicas = df['Categoria'].unique()
@@ -99,11 +99,11 @@ def imputar_valores_columna_categoria(df, remplazo):
     
     for cat in categorias_validas:
         datos_cat = df[df['Categoria'] == cat]['Costo_Unitario_USD']
-        if remplazo == 'Moda':
+        if remplazo == 'moda':
             medida = datos_cat.mode()[0]
-        elif remplazo == 'Mediana':
+        elif remplazo == 'mediana':
             medida = datos_cat.median()
-        else:  # Promedio
+        else:  # media
             medida = datos_cat.mean()
         medidas_por_categoria[cat] = medida
     
@@ -124,7 +124,7 @@ def imputar_valores_columna_categoria(df, remplazo):
     return df
 
 def limpiezar_fecha_ultima_revision(df):
-    df['ultima_revision'] = pd.to_datetime(df['ultima_revision'], errors='coerce')
-    fecha_minima = df['ultima_revision'].min()
-    df['ultima_revision'].fillna(fecha_minima, inplace=True)
+    df['Ultima_Revision'] = pd.to_datetime(df['Ultima_Revision'], errors='coerce')
+    fecha_minima = df['Ultima_Revision'].min()
+    df['Ultima_Revision'].fillna(fecha_minima, inplace=True)
     return df

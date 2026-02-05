@@ -117,6 +117,7 @@ def imputar_valores_comentario_texto(df):
     """
     Imputa valores faltantes en Comentario_Texto con un valor específico.
     """
+    df.loc[df['Comentario_Texto'] == "---", 'Comentario_Texto'] = np.nan
     df['Comentario_Texto'].fillna(df['Comentario_Texto'].mode()[0], inplace=True)
     return df
 
