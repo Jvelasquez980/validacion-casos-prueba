@@ -72,6 +72,7 @@ if st.session_state.get('inventario_file') is not None:
             with tab2:
                 st.subheader("Datos Limpiados")
                 try:
+                    
                     df_limpio = limpiar_inventario(df)
                     
                     # Health Score después de limpieza
@@ -116,37 +117,7 @@ if st.session_state.get('inventario_file') is not None:
                         st.metric("Valores Inválidos Eliminados", f"{audit['valores_invalidos_antes']} → {audit['valores_invalidos_despues']}")
                     
                     st.markdown("---")
-                    
-                    # ========== FILTRO SIMPLE ==========
-                    st.subheader("🎯 Filtrar Datos")
-                    
-                    filtro = st.radio(
-                        "Mostrar registros donde Stock_Actual es mayor que:",
-                        ['Todos', 'Media', 'Mediana', 'Moda'],
-                        horizontal=True
-                    )
-                    
-                    # USAR VARIABLE NUEVA
-                    df_filtrado = df_limpio.copy()
-                    
-                    if filtro == 'Media':
-                        valor = df_limpio['Stock_Actual'].mean()
-                        df_filtrado = df_filtrado[df_filtrado['Stock_Actual'] > valor]
-                        st.info(f"📊 Mostrando {len(df_filtrado)} registros con Stock_Actual > {valor:.2f}")
-                    elif filtro == 'Mediana':
-                        valor = df_limpio['Stock_Actual'].median()
-                        df_filtrado = df_filtrado[df_filtrado['Stock_Actual'] > valor]
-                        st.info(f"📊 Mostrando {len(df_filtrado)} registros con Stock_Actual > {valor:.2f}")
-                    elif filtro == 'Moda':
-                        valor = df_limpio['Stock_Actual'].mode()[0]
-                        df_filtrado = df_filtrado[df_filtrado['Stock_Actual'] > valor]
-                        st.info(f"📊 Mostrando {len(df_filtrado)} registros con Stock_Actual > {valor:.2f}")
-                    
-                    st.markdown("---")
-                    # ========== FIN FILTRO ==========
-                    
-                    # MOSTRAR df_filtrado en vez de df_limpio
-                    display_dataframe_info(df_filtrado)
+                    display_dataframe_info(df_limpio)
                     
                     # Mostrar cambios realizados
                     st.subheader("Cambios Realizados")
@@ -154,14 +125,14 @@ if st.session_state.get('inventario_file') is not None:
                     with col1:
                         st.metric("Registros originales", len(df))
                     with col2:
-                        st.metric("Registros después de filtros", len(df_filtrado))
+                        st.metric("Registros limpiados", len(df_limpio))
                     
-                    # Descargar archivo filtrado
-                    csv_limpio = df_filtrado.to_csv(index=False)
+                    # Descargar archivo limpiado
+                    csv_limpio = df_limpio.to_csv(index=False)
                     st.download_button(
-                        label="📥 Descargar Inventario Filtrado (CSV)",
+                        label="📥 Descargar Inventario Limpiado (CSV)",
                         data=csv_limpio,
-                        file_name="inventario_filtrado.csv",
+                        file_name="inventario_limpiado.csv",
                         mime="text/csv"
                     )
                 except Exception as e:
@@ -171,3 +142,247 @@ if st.session_state.get('inventario_file') is not None:
         st.error(f"❌ Error al procesar: {e}")
 else:
     st.info("📤 Por favor, carga un archivo CSV de Inventario en la barra lateral")
+
+# ========== ANÁLISIS CON IA ==========
+st.markdown("---")
+st.markdown("""
+<div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            padding: 2rem; 
+            border-radius: 15px; 
+            text-align: center;
+            margin: 2rem 0;'>
+    <h2 style='color: white; margin: 0; font-size: 2rem;'>🤖 Análisis Estratégico con IA</h2>
+    <p style='color: rgba(255,255,255,0.9); margin-top: 0.5rem; font-size: 1.1rem;'>
+        Genera recomendaciones estratégicas personalizadas con Llama 3.3
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
+# Container para el input de API Key
+with st.container():
+    st.markdown("#### 🔑 Configuración")
+    col1, col2 = st.columns([4, 1])
+    
+    with col1:
+        groq_api_key = st.text_input(
+            "API Key de Groq",
+            type="password",
+            placeholder="Ingresa tu API key aquí...",
+            help="Tu API key se mantiene privada y no se almacena",
+            label_visibility="collapsed",
+            key="groq_key_inventario"
+        )
+    
+    with col2:
+        st.markdown("""
+        <a href='https://console.groq.com/keys' target='_blank'>
+            <button style='
+                background: #4CAF50;
+                color: white;
+                border: none;
+                padding: 0.5rem 1rem;
+                border-radius: 8px;
+                cursor: pointer;
+                font-weight: bold;
+                margin-top: 0.5rem;
+                width: 100%;
+            '>
+                🔗 Obtener Key
+            </button>
+        </a>
+        """, unsafe_allow_html=True)
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+# Botón principal con mejor diseño
+col1, col2, col3 = st.columns([1, 2, 1])
+with col2:
+    generar_analisis = st.button(
+        "✨ Generar Reporte con Llama 3.3",
+        type="primary",
+        use_container_width=True,
+        disabled=not groq_api_key,
+        key="btn_generar_inventario"
+    )
+
+if generar_analisis:
+    if not groq_api_key:
+        st.error("⚠️ Por favor ingresa tu API Key de Groq")
+    else:
+        # Barra de progreso animada
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        try:
+            from groq import Groq
+            import time
+            
+            # Simular progreso
+            for i in range(20):
+                progress_bar.progress(i * 5)
+                status_text.text(f"🔄 Conectando con Llama 3.3... {i*5}%")
+                time.sleep(0.05)
+            
+            client = Groq(api_key=groq_api_key)
+            
+            # Preparar resumen de INVENTARIO
+            resumen = f"""
+Datos de Inventario - TechLogistics S.A.
+
+Total de productos en catálogo: {len(df_limpio)}
+
+Estadísticas de Stock Actual:
+{df_limpio['Stock_Actual'].describe().to_string()}
+
+Productos con stock crítico (< Punto_Reorden):
+{len(df_limpio[df_limpio['Stock_Actual'] < df_limpio['Punto_Reorden']])} productos ({(len(df_limpio[df_limpio['Stock_Actual'] < df_limpio['Punto_Reorden']])/len(df_limpio)*100):.1f}%)
+
+Distribución por bodega:
+{df_limpio['Bodega_Origen'].value_counts().to_string()}
+
+Estadísticas de costos:
+{df_limpio['Costo_Unitario_USD'].describe().to_string()}
+
+Valor total del inventario: ${(df_limpio['Stock_Actual'] * df_limpio['Costo_Unitario_USD']).sum():,.2f} USD
+
+Lead time promedio: {df_limpio['Lead_Time_Dias'].mean():.1f} días
+"""
+            
+            status_text.text("🧠 Analizando datos de inventario...")
+            progress_bar.progress(60)
+            
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{
+                    "role": "user",
+                    "content": f"""Eres un consultor estratégico senior especializado en gestión de inventarios para TechLogistics S.A.
+
+Analiza estos datos de inventario:
+
+{resumen}
+
+Genera exactamente 3 párrafos de recomendaciones estratégicas accionables y específicas.
+
+Formato requerido:
+- Párrafo 1: Análisis de la situación actual del inventario y principales hallazgos críticos
+- Párrafo 2: Recomendación táctica inmediata para optimizar stock (corto plazo)
+- Párrafo 3: Recomendación estratégica para gestión de inventario (mediano-largo plazo)
+
+Escribe los 3 párrafos separados por línea en blanco, sin títulos ni numeración."""
+                }],
+                temperature=0.7,
+                max_tokens=1500
+            )
+            
+            status_text.text("✍️ Generando recomendaciones...")
+            progress_bar.progress(90)
+            
+            recomendaciones = response.choices[0].message.content
+            
+            progress_bar.progress(100)
+            time.sleep(0.3)
+            status_text.empty()
+            progress_bar.empty()
+            
+            # Mostrar resultados con diseño mejorado
+            st.markdown("""
+            <div style='background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+                        padding: 1rem;
+                        border-radius: 10px;
+                        text-align: center;
+                        margin: 1rem 0;'>
+                <h3 style='color: white; margin: 0;'>✅ Análisis Completado</h3>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Card para las recomendaciones
+            st.markdown("""
+            <div style='background: #f8f9fa;
+                        border-left: 5px solid #667eea;
+                        padding: 1.5rem;
+                        border-radius: 10px;
+                        margin: 1rem 0;
+                        box-shadow: 0 4px 6px rgba(0,0,0,0.1);'>
+                <h3 style='color: #333; margin-top: 0;'>📋 Recomendaciones Estratégicas - Inventario</h3>
+            """, unsafe_allow_html=True)
+            
+            # Dividir en párrafos y mostrar con iconos
+            parrafos = recomendaciones.split('\n\n')
+            iconos = ['🎯', '⚡', '🚀']
+            
+            for i, parrafo in enumerate(parrafos[:3]):
+                if parrafo.strip():
+                    st.markdown(f"""
+                    <div style='margin: 1.5rem 0;'>
+                        <div style='display: flex; align-items: start;'>
+                            <div style='font-size: 2rem; margin-right: 1rem;'>{iconos[i]}</div>
+                            <div style='flex: 1;'>
+                                <p style='color: #555; line-height: 1.8; margin: 0; font-size: 1.05rem;'>
+                                    {parrafo.strip()}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+            # Botones de acción
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.download_button(
+                    "📥 Descargar Reporte",
+                    recomendaciones,
+                    file_name=f"recomendaciones_inventario_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.txt",
+                    mime="text/plain",
+                    use_container_width=True,
+                    key="download_inv"
+                )
+            
+            with col2:
+                if st.button("📋 Copiar al Portapapeles", use_container_width=True, key="copy_inv"):
+                    st.code(recomendaciones, language=None)
+                    st.success("✅ Texto listo para copiar")
+            
+            with col3:
+                if st.button("🔄 Generar Nuevo Análisis", use_container_width=True, key="refresh_inv"):
+                    st.rerun()
+            
+            # Disclaimer
+            st.markdown("""
+            <div style='background: #fff3cd;
+                        border-left: 4px solid #ffc107;
+                        padding: 1rem;
+                        border-radius: 8px;
+                        margin-top: 2rem;'>
+                <small style='color: #856404;'>
+                    ⚠️ <strong>Nota:</strong> Estas recomendaciones son generadas por IA y deben ser 
+                    revisadas por un experto en gestión de inventarios antes de implementarlas.
+                </small>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        except Exception as e:
+            progress_bar.empty()
+            status_text.empty()
+            
+            st.markdown("""
+            <div style='background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+                        padding: 1.5rem;
+                        border-radius: 10px;
+                        text-align: center;
+                        color: white;'>
+                <h3 style='margin: 0;'>❌ Error al Generar Análisis</h3>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.error(f"**Detalles del error:** {str(e)}")
+            
+            with st.expander("💡 Posibles soluciones"):
+                st.markdown("""
+                - ✓ Verifica que tu API key sea correcta
+                - ✓ Asegúrate de tener créditos en tu cuenta de Groq
+                - ✓ Revisa tu conexión a internet
+                - ✓ Intenta generar el reporte nuevamente
+                """)
