@@ -72,7 +72,6 @@ if st.session_state.get('inventario_file') is not None:
             with tab2:
                 st.subheader("Datos Limpiados")
                 try:
-                    
                     df_limpio = limpiar_inventario(df)
                     
                     # Health Score después de limpieza
@@ -117,7 +116,37 @@ if st.session_state.get('inventario_file') is not None:
                         st.metric("Valores Inválidos Eliminados", f"{audit['valores_invalidos_antes']} → {audit['valores_invalidos_despues']}")
                     
                     st.markdown("---")
-                    display_dataframe_info(df_limpio)
+                    
+                    # ========== FILTRO SIMPLE ==========
+                    st.subheader("🎯 Filtrar Datos")
+                    
+                    filtro = st.radio(
+                        "Mostrar registros donde Stock_Actual es mayor que:",
+                        ['Todos', 'Media', 'Mediana', 'Moda'],
+                        horizontal=True
+                    )
+                    
+                    # USAR VARIABLE NUEVA
+                    df_filtrado = df_limpio.copy()
+                    
+                    if filtro == 'Media':
+                        valor = df_limpio['Stock_Actual'].mean()
+                        df_filtrado = df_filtrado[df_filtrado['Stock_Actual'] > valor]
+                        st.info(f"📊 Mostrando {len(df_filtrado)} registros con Stock_Actual > {valor:.2f}")
+                    elif filtro == 'Mediana':
+                        valor = df_limpio['Stock_Actual'].median()
+                        df_filtrado = df_filtrado[df_filtrado['Stock_Actual'] > valor]
+                        st.info(f"📊 Mostrando {len(df_filtrado)} registros con Stock_Actual > {valor:.2f}")
+                    elif filtro == 'Moda':
+                        valor = df_limpio['Stock_Actual'].mode()[0]
+                        df_filtrado = df_filtrado[df_filtrado['Stock_Actual'] > valor]
+                        st.info(f"📊 Mostrando {len(df_filtrado)} registros con Stock_Actual > {valor:.2f}")
+                    
+                    st.markdown("---")
+                    # ========== FIN FILTRO ==========
+                    
+                    # MOSTRAR df_filtrado en vez de df_limpio
+                    display_dataframe_info(df_filtrado)
                     
                     # Mostrar cambios realizados
                     st.subheader("Cambios Realizados")
@@ -125,14 +154,14 @@ if st.session_state.get('inventario_file') is not None:
                     with col1:
                         st.metric("Registros originales", len(df))
                     with col2:
-                        st.metric("Registros limpiados", len(df_limpio))
+                        st.metric("Registros después de filtros", len(df_filtrado))
                     
-                    # Descargar archivo limpiado
-                    csv_limpio = df_limpio.to_csv(index=False)
+                    # Descargar archivo filtrado
+                    csv_limpio = df_filtrado.to_csv(index=False)
                     st.download_button(
-                        label="📥 Descargar Inventario Limpiado (CSV)",
+                        label="📥 Descargar Inventario Filtrado (CSV)",
                         data=csv_limpio,
-                        file_name="inventario_limpiado.csv",
+                        file_name="inventario_filtrado.csv",
                         mime="text/csv"
                     )
                 except Exception as e:
