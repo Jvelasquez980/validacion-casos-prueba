@@ -50,6 +50,8 @@ def calcular_health_score(df):
     # Calcular nulidad global
     if 'Comentario_Texto' in df.columns:
         df.loc[df['Comentario_Texto'] == "---", 'Comentario_Texto'] = np.nan
+    if 'Categoria' in df.columns:
+        df.loc[df['Categoria'] == "???", 'Categoria'] = np.nan
     null_global_pct = (df.isna().sum().sum() / (n_rows * n_cols) * 100) if (n_rows and n_cols) else 0.0
     
     # Calcular duplicados
@@ -181,7 +183,7 @@ def limpiar_inventario(df):
         pass
     
     try:
-        df = imputar_valores_columna_categoria(df, 'Mediana')
+        df = imputar_valores_columna_categoria(df, 'mediana')
     except:
         pass
     

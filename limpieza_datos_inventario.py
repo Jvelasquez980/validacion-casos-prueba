@@ -87,12 +87,15 @@ def imputar_valores_columna_categoria(df, remplazo):
     Returns:
         DataFrame con categorías imputadas
     """
+    df['Categoria'] = df['Categoria'].replace({'LAPTOP':'Laptops',
+                                       'smart-phone':'Smartphones',
+                                       '???': np.nan})
     if remplazo not in ['moda', 'mediana', 'media']:
         raise ValueError("El parámetro 'remplazo' debe ser 'moda', 'mediana' o 'media'.")
-    
-    # Obtenemos categorías únicas excluyendo '???'
+    df['Categoria'] = df['Categoria'].astype(str)   
+    # Obtenemos categorías únicas excluyendo NaN y 'nan'
     categorias_unicas = df['Categoria'].unique()
-    categorias_validas = [cat for cat in categorias_unicas if cat != '???']
+    categorias_validas = [cat for cat in categorias_unicas if cat not in ['nan', np.nan]]
     
     # Calculamos las medidas estadísticas para cada categoría válida
     medidas_por_categoria = {}
@@ -107,9 +110,8 @@ def imputar_valores_columna_categoria(df, remplazo):
             medida = datos_cat.mean()
         medidas_por_categoria[cat] = medida
     
-    # Identificamos filas con categoria "???"
-    mask_desconocidos = df['Categoria'] == '???'
-    
+    # Identificamos filas con categoria "???" o 'nan' (string después de astype)
+    mask_desconocidos = (df['Categoria'] == 'nan')
     # Reemplazamos cada "???" con la categoría cuya medida esté más cercana
     for idx in df[mask_desconocidos].index:
         costo_valor = df.loc[idx, 'Costo_Unitario_USD']
@@ -117,7 +119,7 @@ def imputar_valores_columna_categoria(df, remplazo):
         # Encontramos la categoría con la medida más cercana
         categoria_asignada = min(medidas_por_categoria.keys(), 
                                 key=lambda cat: abs(medidas_por_categoria[cat] - costo_valor))
-        
+        print(f"Reemplazando '???' en índice {idx} con categoría '{categoria_asignada}' basada en costo unitario de {costo_valor}.")
         # Reemplazamos la categoría
         df.loc[idx, 'Categoria'] = categoria_asignada
     
