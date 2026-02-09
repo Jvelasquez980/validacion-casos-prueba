@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 from utils.data_loader import display_dataframe_info, load_csv_file
 from utils.session_init import init_session_state
 from utils.data_cleaning import limpiar_feedback, generar_audit_summary, calcular_health_score, contar_valores_invalidos
@@ -115,7 +117,518 @@ if st.session_state.get('feedback_file') is not None:
                         st.metric("Valores Inválidos Eliminados", f"{audit['valores_invalidos_antes']} → {audit['valores_invalidos_despues']}")
                     
                     st.markdown("---")
-                    display_dataframe_info(df_limpio)
+                    
+                    # ========== GRÁFICAS DE ANÁLISIS ==========
+                    st.markdown("### 📊 Análisis de Feedback - Gráficas")
+                    
+                    col1, col2 = st.columns(2)
+                    
+                    # Gráfica 1: Cantidad de feedback por tipo de comentario
+                    with col1:
+                        st.markdown("#### 💭 Cantidad de Feedback por Tipo de Comentario")
+                        comentario_count = df_limpio['Comentario_Texto'].value_counts().reset_index()
+                        comentario_count.columns = ['Comentario', 'Cantidad']
+                        
+                        fig_comentario = px.bar(
+                            comentario_count,
+                            x='Comentario',
+                            y='Cantidad',
+                            color='Cantidad',
+                            color_continuous_scale='Viridis',
+                            text='Cantidad',
+                            title="Cantidad de Feedback por Tipo de Comentario"
+                        )
+                        fig_comentario.update_layout(
+                            height=400,
+                            xaxis_title="Tipo de Comentario",
+                            yaxis_title="Cantidad",
+                            hovermode='x unified',
+                            showlegend=False
+                        )
+                        fig_comentario.update_traces(textposition='auto')
+                        st.plotly_chart(fig_comentario, use_container_width=True)
+                    
+                    # Gráfica 2: Cantidad de feedback por recomendación de marca
+                    with col2:
+                        st.markdown("#### ⭐ Cantidad de Feedback por Recomendación de Marca")
+                        recomendacion_count = df_limpio['Recomienda_Marca'].value_counts().reset_index()
+                        recomendacion_count.columns = ['Recomendacion', 'Cantidad']
+                        
+                        # Mapear valores para mejor visualización
+                        color_map = {'SI': '#2ecc71', 'MAYBE': '#f39c12', 'NO': '#e74c3c'}
+                        recomendacion_count['Color'] = recomendacion_count['Recomendacion'].map(color_map)
+                        
+                        fig_recomendacion = px.pie(
+                            recomendacion_count,
+                            names='Recomendacion',
+                            values='Cantidad',
+                            title="Distribución de Recomendación de Marca",
+                            color='Recomendacion',
+                            color_discrete_map=color_map
+                        )
+                        fig_recomendacion.update_traces(
+                            textposition='inside',
+                            textinfo='label+percent',
+                            hovertemplate='<b>%{label}</b><br>Cantidad: %{value}<br>Porcentaje: %{percent}<extra></extra>'
+                        )
+                        fig_recomendacion.update_layout(height=400)
+                        st.plotly_chart(fig_recomendacion, use_container_width=True)
+                    
+                    col3, col4 = st.columns(2)
+                    
+                    # Gráfica 3: Cantidad de feedback por ticket de soporte abierto
+                    with col3:
+                        st.markdown("#### 🎫 Cantidad de Feedback por Ticket de Soporte Abierto")
+                        ticket_count = df_limpio['Ticket_Soporte_Abierto'].value_counts().reset_index()
+                        ticket_count.columns = ['Ticket_Abierto', 'Cantidad']
+                        
+                        fig_ticket = px.bar(
+                            ticket_count,
+                            x='Ticket_Abierto',
+                            y='Cantidad',
+                            color='Ticket_Abierto',
+                            color_discrete_map={'Sí': '#e74c3c', 'No': '#2ecc71'},
+                            text='Cantidad',
+                            title="Feedback con Ticket de Soporte Abierto"
+                        )
+                        fig_ticket.update_layout(
+                            height=400,
+                            xaxis_title="Ticket de Soporte Abierto",
+                            yaxis_title="Cantidad",
+                            hovermode='x unified',
+                            showlegend=False
+                        )
+                        fig_ticket.update_traces(textposition='auto')
+                        st.plotly_chart(fig_ticket, use_container_width=True)
+                        
+                        # Mostrar porcentaje
+                        pct_con_ticket = (ticket_count[ticket_count['Ticket_Abierto'] == 'Sí']['Cantidad'].values[0] / ticket_count['Cantidad'].sum() * 100) if 'Sí' in ticket_count['Ticket_Abierto'].values else 0
+                        st.metric("% Feedback con Ticket", f"{pct_con_ticket:.1f}%")
+                    
+                    # Gráfica 4: Cantidad de feedback por rango de edad
+                    with col4:
+                        st.markdown("#### 👥 Cantidad de Feedback por Rango de Edad")
+                        
+                        # Crear rangos de edad
+                        def categorizar_edad(edad):
+                            if edad < 18:
+                                return "< 18"
+                            elif edad < 26:
+                                return "18-25"
+                            elif edad < 36:
+                                return "26-35"
+                            elif edad < 51:
+                                return "36-50"
+                            elif edad < 66:
+                                return "51-65"
+                            else:
+                                return "65+"
+                        
+                        df_limpio['Rango_Edad'] = df_limpio['Edad_Cliente'].apply(categorizar_edad)
+                        edad_count = df_limpio['Rango_Edad'].value_counts().reindex(['< 18', '18-25', '26-35', '36-50', '51-65', '65+'], fill_value=0)
+                        edad_count = edad_count.reset_index()
+                        edad_count.columns = ['Rango_Edad', 'Cantidad']
+                        
+                        fig_edad = px.bar(
+                            edad_count,
+                            x='Rango_Edad',
+                            y='Cantidad',
+                            color='Cantidad',
+                            color_continuous_scale='Plasma',
+                            text='Cantidad',
+                            title="Cantidad de Feedback por Rango de Edad"
+                        )
+                        fig_edad.update_layout(
+                            height=400,
+                            xaxis_title="Rango de Edad",
+                            yaxis_title="Cantidad",
+                            hovermode='x unified',
+                            showlegend=False
+                        )
+                        fig_edad.update_traces(textposition='auto')
+                        st.plotly_chart(fig_edad, use_container_width=True)
+                    
+                    # Gráfica 5: Cantidad de feedback por rango de satisfacción NPS
+                    col5, col6 = st.columns(2)
+                    
+                    with col5:
+                        st.markdown("#### 📊 Cantidad de Feedback por Rango de Satisfacción NPS")
+                        
+                        # Crear rangos de NPS
+                        def categorizar_nps(nps):
+                            if nps < -50:
+                                return "Muy Insatisfecho (< -50)"
+                            elif nps < 0:
+                                return "Insatisfecho (-50 a 0)"
+                            elif nps < 30:
+                                return "Neutral (0 a 30)"
+                            elif nps < 70:
+                                return "Satisfecho (30 a 70)"
+                            else:
+                                return "Muy Satisfecho (≥ 70)"
+                        
+                        df_limpio['Rango_NPS'] = df_limpio['Satisfaccion_NPS'].apply(categorizar_nps)
+                        nps_count = df_limpio['Rango_NPS'].value_counts().reindex(
+                            ['Muy Insatisfecho (< -50)', 'Insatisfecho (-50 a 0)', 'Neutral (0 a 30)', 'Satisfecho (30 a 70)', 'Muy Satisfecho (≥ 70)'],
+                            fill_value=0
+                        )
+                        nps_count = nps_count.reset_index()
+                        nps_count.columns = ['Rango_NPS', 'Cantidad']
+                        
+                        # Colores según nivel de satisfacción
+                        colors_nps = ['#e74c3c', '#e67e22', '#f39c12', '#3498db', '#2ecc71']
+                        
+                        fig_nps = px.bar(
+                            nps_count,
+                            x='Rango_NPS',
+                            y='Cantidad',
+                            color='Cantidad',
+                            color_continuous_scale='RdYlGn',
+                            text='Cantidad',
+                            title="Cantidad de Feedback por Rango de Satisfacción NPS"
+                        )
+                        fig_nps.update_layout(
+                            height=400,
+                            xaxis_title="Rango de Satisfacción NPS",
+                            yaxis_title="Cantidad",
+                            hovermode='x unified',
+                            showlegend=False,
+                            xaxis_tickangle=-45
+                        )
+                        fig_nps.update_traces(textposition='auto')
+                        st.plotly_chart(fig_nps, use_container_width=True)
+                    
+                    # Estadísticas adicionales de NPS
+                    with col6:
+                        st.markdown("#### 📈 Estadísticas de Satisfacción")
+                        
+                        col_stat1, col_stat2 = st.columns(2)
+                        with col_stat1:
+                            nps_promedio = df_limpio['Satisfaccion_NPS'].mean()
+                            st.metric("NPS Promedio", f"{nps_promedio:.1f}/10")
+                        
+                        with col_stat2:
+                            nps_max = df_limpio['Satisfaccion_NPS'].max()
+                            st.metric("NPS Máximo", f"{nps_max:.1f}/10")
+                        
+                        col_stat3, col_stat4 = st.columns(2)
+                        with col_stat3:
+                            nps_min = df_limpio['Satisfaccion_NPS'].min()
+                            st.metric("NPS Mínimo", f"{nps_min:.1f}/10")
+                        
+                        with col_stat4:
+                            nps_mediana = df_limpio['Satisfaccion_NPS'].median()
+                            st.metric("NPS Mediana", f"{nps_mediana:.1f}/10")
+                        
+                        st.markdown("---")
+                        
+                        # Distribuición de ratings
+                        st.markdown("#### ⭐ Ratings Promedio")
+                        col_rating1, col_rating2 = st.columns(2)
+                        with col_rating1:
+                            rating_prod = df_limpio['Rating_Producto'].mean()
+                            st.metric("Rating Producto", f"{rating_prod:.2f}/5")
+                        with col_rating2:
+                            rating_log = df_limpio['Rating_Logistica'].mean()
+                            st.metric("Rating Logística", f"{rating_log:.2f}/5")
+                    
+                    st.markdown("---")
+                    
+                    # ========== GRÁFICAS ADICIONALES AVANZADAS ==========
+                    st.markdown("### 📈 Análisis Avanzado de Feedback")
+                    
+                    col7, col8 = st.columns(2)
+                    
+                    # Gráfica 1: Scatter - Rating Producto vs Rating Logística
+                    with col7:
+                        st.markdown("#### 📊 Correlación: Rating Producto vs Rating Logística")
+                        
+                        # Convertir NPS a un rango positivo para el size
+                        df_limpio['NPS_Scaled'] = (df_limpio['Satisfaccion_NPS'] + 100) / 2
+                        
+                        fig_scatter_ratings = px.scatter(
+                            df_limpio,
+                            x='Rating_Producto',
+                            y='Rating_Logistica',
+                            color='Satisfaccion_NPS',
+                            size='NPS_Scaled',
+                            hover_name='Feedback_ID',
+                            hover_data={'Rating_Producto': True, 'Rating_Logistica': True, 'Satisfaccion_NPS': ':.1f', 'NPS_Scaled': False},
+                            title="Rating Producto vs Rating Logística",
+                            labels={'Rating_Producto': 'Rating Producto (1-5)', 'Rating_Logistica': 'Rating Logística (1-5)'},
+                            color_continuous_scale='RdYlGn'
+                        )
+                        fig_scatter_ratings.update_layout(
+                            height=400,
+                            hovermode='closest',
+                            plot_bgcolor='rgba(240,240,240,0.5)'
+                        )
+                        st.plotly_chart(fig_scatter_ratings, use_container_width=True)
+                    
+                    # Gráfica 2: Box Plot - Rating Producto por Rango de Edad
+                    with col8:
+                        st.markdown("#### 📦 Rating Producto por Rango de Edad")
+                        
+                        fig_box_prod_edad = px.box(
+                            df_limpio,
+                            x='Rango_Edad',
+                            y='Rating_Producto',
+                            color='Rango_Edad',
+                            title="Distribución de Rating Producto por Edad",
+                            category_orders={'Rango_Edad': ['< 18', '18-25', '26-35', '36-50', '51-65', '65+']},
+                            labels={'Rating_Producto': 'Rating (1-5)', 'Rango_Edad': 'Rango de Edad'}
+                        )
+                        fig_box_prod_edad.update_layout(
+                            height=400,
+                            showlegend=False
+                        )
+                        st.plotly_chart(fig_box_prod_edad, use_container_width=True)
+                    
+                    col9, col10 = st.columns(2)
+                    
+                    # Gráfica 3: Box Plot - Rating Logística por Rango de Edad
+                    with col9:
+                        st.markdown("#### 🚚 Rating Logística por Rango de Edad")
+                        
+                        fig_box_log_edad = px.box(
+                            df_limpio,
+                            x='Rango_Edad',
+                            y='Rating_Logistica',
+                            color='Rango_Edad',
+                            title="Distribución de Rating Logística por Edad",
+                            category_orders={'Rango_Edad': ['< 18', '18-25', '26-35', '36-50', '51-65', '65+']},
+                            labels={'Rating_Logistica': 'Rating (1-5)', 'Rango_Edad': 'Rango de Edad'}
+                        )
+                        fig_box_log_edad.update_layout(
+                            height=400,
+                            showlegend=False
+                        )
+                        st.plotly_chart(fig_box_log_edad, use_container_width=True)
+                    
+                    # Gráfica 4: Scatter - NPS vs Rating Producto
+                    with col10:
+                        st.markdown("#### 🎯 Satisfacción NPS vs Rating Producto")
+                        
+                        # Escalar Rating Logistica para size (convertir a positivo si es necesario)
+                        df_limpio['Rating_Log_Scaled'] = df_limpio['Rating_Logistica'] * 10
+                        
+                        fig_scatter_nps = px.scatter(
+                            df_limpio,
+                            x='Rating_Producto',
+                            y='Satisfaccion_NPS',
+                            color='Recomienda_Marca',
+                            size='Rating_Log_Scaled',
+                            hover_name='Feedback_ID',
+                            hover_data={'Rating_Producto': True, 'Satisfaccion_NPS': ':.1f', 'Recomienda_Marca': True, 'Rating_Log_Scaled': False},
+                            title="NPS vs Rating Producto",
+                            labels={'Rating_Producto': 'Rating Producto (1-5)', 'Satisfaccion_NPS': 'Satisfacción NPS'},
+                            color_discrete_map={'SI': '#2ecc71', 'MAYBE': '#f39c12', 'NO': '#e74c3c'}
+                        )
+                        fig_scatter_nps.update_layout(
+                            height=400,
+                            hovermode='closest',
+                            plot_bgcolor='rgba(240,240,240,0.5)'
+                        )
+                        st.plotly_chart(fig_scatter_nps, use_container_width=True)
+                    
+                    st.markdown("---")
+                    col11, col12 = st.columns(2)
+                    
+                    # Gráfica 5: Heatmap - Recomienda Marca vs Rating Producto
+                    with col11:
+                        st.markdown("#### 🔥 Matriz: Recomendación vs Rating Producto")
+                        
+                        crosstab_recomenda = pd.crosstab(
+                            df_limpio['Recomienda_Marca'].astype(str),
+                            df_limpio['Rating_Producto'].astype(int)
+                        )
+                        
+                        fig_heatmap_recomenda = px.imshow(
+                            crosstab_recomenda,
+                            labels=dict(x="Rating Producto", y="Recomienda Marca", color="Cantidad"),
+                            color_continuous_scale='YlOrRd',
+                            title="Matriz: Recomendación vs Rating Producto",
+                            text_auto=True,
+                            aspect='auto'
+                        )
+                        fig_heatmap_recomenda.update_layout(height=400)
+                        st.plotly_chart(fig_heatmap_recomenda, use_container_width=True)
+                    
+                    # Gráfica 6: Histograma - Distribución de Edades
+                    with col12:
+                        st.markdown("#### 👥 Distribución de Edades de Clientes")
+                        
+                        fig_hist_edad = px.histogram(
+                            df_limpio,
+                            x='Edad_Cliente',
+                            nbins=20,
+                            color_discrete_sequence=['#3498db'],
+                            title="Distribución de Edades",
+                            labels={'Edad_Cliente': 'Edad (años)', 'count': 'Frecuencia'}
+                        )
+                        fig_hist_edad.update_layout(
+                            height=400,
+                            showlegend=False,
+                            bargap=0.1
+                        )
+                        st.plotly_chart(fig_hist_edad, use_container_width=True)
+                    
+                    st.markdown("---")
+                    col13, col14 = st.columns([1.5, 1])
+                    
+                    # Gráfica 7: Heatmap Correlación
+                    with col13:
+                        st.markdown("#### 🔗 Matriz de Correlación entre Métricas")
+                        
+                        # Crear matriz de correlación
+                        df_corr = df_limpio[['Rating_Producto', 'Rating_Logistica', 'Satisfaccion_NPS', 'Edad_Cliente']].corr()
+                        
+                        fig_corr_matrix = px.imshow(
+                            df_corr,
+                            labels=dict(color="Correlación"),
+                            color_continuous_scale='RdBu',
+                            color_continuous_midpoint=0,
+                            text_auto='.2f',
+                            title="Correlación entre Métricas",
+                            zmin=-1,
+                            zmax=1,
+                            aspect='auto'
+                        )
+                        fig_corr_matrix.update_layout(height=400)
+                        st.plotly_chart(fig_corr_matrix, use_container_width=True)
+                    
+                    # Gráfica 8: Tabla Cruzada - Comentario vs Recomienda
+                    with col14:
+                        st.markdown("#### 💬 Comentario vs Recomendación")
+                        
+                        crosstab_comment = pd.crosstab(
+                            df_limpio['Comentario_Texto'].astype(str),
+                            df_limpio['Recomienda_Marca'].astype(str)
+                        )
+                        
+                        fig_heatmap_comment = px.imshow(
+                            crosstab_comment,
+                            labels=dict(x="Recomienda Marca", y="Tipo Comentario", color="Cantidad"),
+                            color_continuous_scale='Viridis',
+                            title="Comentario vs Recomendación",
+                            text_auto=True,
+                            aspect='auto'
+                        )
+                        fig_heatmap_comment.update_layout(height=400)
+                        st.plotly_chart(fig_heatmap_comment, use_container_width=True)
+                    
+                    st.markdown("---")
+                    
+                    # Gráfica 9: Gauge Charts - KPI Dashboard
+                    st.markdown("#### 📊 Dashboard de KPIs")
+                    
+                    col_gauge1, col_gauge2, col_gauge3 = st.columns(3)
+                    
+                    with col_gauge1:
+                        nps_avg = df_limpio['Satisfaccion_NPS'].mean()
+                        fig_gauge_nps = go.Figure(go.Indicator(
+                            mode="gauge+number+delta",
+                            value=nps_avg,
+                            domain={'x': [0, 1], 'y': [0, 1]},
+                            title={'text': "NPS Promedio"},
+                            delta={'reference': 0},
+                            gauge={
+                                'axis': {'range': [-100, 100]},
+                                'bar': {'color': "#3498db"},
+                                'steps': [
+                                    {'range': [-100, -50], 'color': "#e74c3c"},
+                                    {'range': [-50, 0], 'color': "#e67e22"},
+                                    {'range': [0, 30], 'color': "#f39c12"},
+                                    {'range': [30, 70], 'color': "#3498db"},
+                                    {'range': [70, 100], 'color': "#2ecc71"}
+                                ],
+                                'threshold': {
+                                    'line': {'color': "red", 'width': 4},
+                                    'thickness': 0.75,
+                                    'value': 50
+                                }
+                            }
+                        ))
+                        fig_gauge_nps.update_layout(height=300)
+                        st.plotly_chart(fig_gauge_nps, use_container_width=True)
+                    
+                    with col_gauge2:
+                        rating_prod_avg = df_limpio['Rating_Producto'].mean()
+                        fig_gauge_prod = go.Figure(go.Indicator(
+                            mode="gauge+number+delta",
+                            value=rating_prod_avg,
+                            domain={'x': [0, 1], 'y': [0, 1]},
+                            title={'text': "Rating Producto"},
+                            delta={'reference': 3},
+                            gauge={
+                                'axis': {'range': [1, 5]},
+                                'bar': {'color': "#f39c12"},
+                                'steps': [
+                                    {'range': [1, 2], 'color': "#e74c3c"},
+                                    {'range': [2, 3], 'color': "#f39c12"},
+                                    {'range': [3, 4], 'color': "#3498db"},
+                                    {'range': [4, 5], 'color': "#2ecc71"}
+                                ],
+                                'threshold': {
+                                    'line': {'color': "red", 'width': 4},
+                                    'thickness': 0.75,
+                                    'value': 4
+                                }
+                            }
+                        ))
+                        fig_gauge_prod.update_layout(height=300)
+                        st.plotly_chart(fig_gauge_prod, use_container_width=True)
+                    
+                    with col_gauge3:
+                        rating_log_avg = df_limpio['Rating_Logistica'].mean()
+                        fig_gauge_log = go.Figure(go.Indicator(
+                            mode="gauge+number+delta",
+                            value=rating_log_avg,
+                            domain={'x': [0, 1], 'y': [0, 1]},
+                            title={'text': "Rating Logística"},
+                            delta={'reference': 3},
+                            gauge={
+                                'axis': {'range': [1, 5]},
+                                'bar': {'color': "#2ecc71"},
+                                'steps': [
+                                    {'range': [1, 2], 'color': "#e74c3c"},
+                                    {'range': [2, 3], 'color': "#f39c12"},
+                                    {'range': [3, 4], 'color': "#3498db"},
+                                    {'range': [4, 5], 'color': "#2ecc71"}
+                                ],
+                                'threshold': {
+                                    'line': {'color': "red", 'width': 4},
+                                    'thickness': 0.75,
+                                    'value': 4
+                                }
+                            }
+                        ))
+                        fig_gauge_log.update_layout(height=300)
+                        st.plotly_chart(fig_gauge_log, use_container_width=True)
+                    
+                    st.markdown("---")
+                    
+                    # Gráfica 10: Violin Plot - Rating Producto por Comentario
+                    st.markdown("#### 🎻 Violin Plot: Rating Producto por Tipo de Comentario")
+                    
+                    fig_violin = px.violin(
+                        df_limpio,
+                        x='Comentario_Texto',
+                        y='Rating_Producto',
+                        color='Comentario_Texto',
+                        box=True,
+                        points='outliers',
+                        title="Distribución de Rating Producto por Tipo de Comentario",
+                        labels={'Rating_Producto': 'Rating (1-5)', 'Comentario_Texto': 'Tipo de Comentario'}
+                    )
+                    fig_violin.update_layout(
+                        height=450,
+                        showlegend=False,
+                        hovermode='x unified'
+                    )
+                    st.plotly_chart(fig_violin, use_container_width=True)
+                    
+                    st.markdown("---")
                     
                     # Mostrar cambios realizados
                     st.subheader("Cambios Realizados")

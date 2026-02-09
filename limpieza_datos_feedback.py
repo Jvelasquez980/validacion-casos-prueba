@@ -19,6 +19,7 @@ def manejar_outliers_rating_producto(df, medida='Mediana'):
     """
     
     df_copy = df.copy()
+    df_copy['Ticket_Soporte_Abierto'] = df_copy['Ticket_Soporte_Abierto'].replace({"1": "Sí", "0": "No"})
     columna = 'Rating_Producto'
     
     # Detectar outliers usando IQR
