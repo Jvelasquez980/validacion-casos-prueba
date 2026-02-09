@@ -99,10 +99,10 @@ def calcular_health_score(df):
     # Calcular health score con pesos basados en severidad
     # Los pesos representan independientemente cuán grave es cada problema
     # No necesitan sumar 100 porque los errores son acumulativos
-    penalty_nulls = null_global_pct * 0.4           # Moderadamente grave (se pueden imputar)
-    penalty_dup = dup_ratio * 0.5                   # Grave (datos redundantes)
-    penalty_outliers = outlier_ratio * 0.7          # Muy grave (sesgan análisis y modelos)
-    penalty_negatives = negative_ratio * 0.6        # Muy grave (valores inválidos claros)
+    penalty_nulls = null_global_pct * 5           # Moderadamente grave (se pueden imputar)
+    penalty_dup = dup_ratio * 7                   # Grave (datos redundantes)
+    penalty_outliers = outlier_ratio * 3          # Muy grave (sesgan análisis y modelos)
+    penalty_negatives = negative_ratio * 7        # Muy grave (valores inválidos claros)
     
     score = 100 - (penalty_nulls + penalty_dup + penalty_outliers + penalty_negatives)
     score = float(max(0, min(100, score)))

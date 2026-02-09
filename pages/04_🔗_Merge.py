@@ -189,8 +189,10 @@ if st.session_state.get('inventario_file') is not None and st.session_state.get(
                         cols_info = []
                         if 'Rating_Servicio' in df_integrado.columns:
                             cols_info.append("✅ **Rating_Servicio**: Combinación normalizada de Rating_Producto y Rating_Logistica")
-                        if 'Margen' in df_integrado.columns:
-                            cols_info.append("✅ **Margen**: Porcentaje de margen de ganancia por producto")
+                        if 'Margen_Real_Pct' in df_integrado.columns:
+                            cols_info.append("✅ **Margen_Real_Pct**: Margen real (%) considerando todos los costos")
+                        if 'Ganancia_Neta_Total' in df_integrado.columns:
+                            cols_info.append("✅ **Ganancia_Neta_Total**: Ganancia total en USD considerando costo de envío")
                         
                         if cols_info:
                             for info in cols_info:
@@ -201,14 +203,14 @@ if st.session_state.get('inventario_file') is not None and st.session_state.get(
                             st.subheader("Estadísticas de Rating_Servicio")
                             st.write(df_integrado['Rating_Servicio'].describe())
                         
-                        if 'Margen' in df_integrado.columns:
+                        if 'Margen_Real_Pct' in df_integrado.columns:
                             st.subheader("📊 Análisis de Márgenes y Ganancias")
                             
                             # Calcular ganancia neta
-                            ganancia_neta = df_integrado['Margen'].sum()
-                            margen_promedio = df_integrado['Margen'].mean()
-                            margen_maximo = df_integrado['Margen'].max()
-                            margen_minimo = df_integrado['Margen'].min()
+                            ganancia_neta = df_integrado['Ganancia_Neta_Total'].sum()
+                            margen_promedio = df_integrado['Margen_Real_Pct'].mean()
+                            margen_maximo = df_integrado['Margen_Real_Pct'].max()
+                            margen_minimo = df_integrado['Margen_Real_Pct'].min()
                             
                             # Mostrar métricas principales
                             col1, col2, col3, col4 = st.columns(4)
@@ -223,7 +225,7 @@ if st.session_state.get('inventario_file') is not None and st.session_state.get(
                             
                             # Mostrar estadísticas completas
                             st.subheader("Estadísticas Detalladas de Márgenes")
-                            st.write(df_integrado['Margen'].describe())
+                            st.write(df_integrado['Margen_Real_Pct'].describe())
                         
                         # ==========================================
                         # SECCIÓN DE GRÁFICAS ANALÍTICAS INTEGRADAS
@@ -246,8 +248,8 @@ if st.session_state.get('inventario_file') is not None and st.session_state.get(
                         st.markdown("### 1️⃣ KPIs Principales - Revenue & Profitability")
                         
                         revenue_total = df_dash['Revenue'].sum()
-                        ganancia_total = df_dash['Margen'].sum()
-                        margen_pct = (ganancia_total / revenue_total * 100) if revenue_total > 0 else 0
+                        ganancia_total = df_dash['Ganancia_Neta_Total'].sum()
+                        margen_pct = df_dash['Margen_Real_Pct'].mean()
                         aov = df_dash['Revenue'].mean()
                         
                         col1, col2, col3, col4 = st.columns(4)
@@ -331,7 +333,7 @@ if st.session_state.get('inventario_file') is not None and st.session_state.get(
                         with col1:
                             top_productos_rev = df_dash.groupby('SKU_ID').agg({
                                 'Revenue': 'sum',
-                                'Margen': 'sum',
+                                'Ganancia_Neta_Total': 'sum',
                                 'Cantidad_Vendida': 'sum'
                             }).sort_values('Revenue', ascending=False).head(10)
                             
@@ -365,18 +367,17 @@ if st.session_state.get('inventario_file') is not None and st.session_state.get(
                         with col3:
                             canal_rentabilidad = df_dash.groupby('Canal_Venta').agg({
                                 'Revenue': 'sum',
-                                'Margen': 'sum'
+                                'Margen_Real_Pct': 'mean'
                             })
-                            canal_rentabilidad['Margen_Pct'] = (canal_rentabilidad['Margen'] / canal_rentabilidad['Revenue'] * 100)
                             
                             fig_canal_rent = px.bar(
                                 x=canal_rentabilidad.index,
-                                y=canal_rentabilidad['Margen_Pct'],
-                                title='📈 Rentabilidad por Canal (%)',
-                                labels={'x': 'Canal', 'y': 'Margen %'},
-                                color=canal_rentabilidad['Margen_Pct'],
+                                y=canal_rentabilidad['Margen_Real_Pct'],
+                                title='📈 Margen Real por Canal (%)',
+                                labels={'x': 'Canal', 'y': 'Margen Real %'},
+                                color=canal_rentabilidad['Margen_Real_Pct'],
                                 color_continuous_scale='RdYlGn',
-                                text=canal_rentabilidad['Margen_Pct'].round(1)
+                                text=canal_rentabilidad['Margen_Real_Pct'].round(1)
                             )
                             fig_canal_rent.update_traces(textposition='auto')
                             fig_canal_rent.update_layout(height=400, showlegend=False)
@@ -403,7 +404,7 @@ if st.session_state.get('inventario_file') is not None and st.session_state.get(
                                 labels={'Rating_Producto': 'Rating Producto', 'Revenue': 'Revenue ($)'},
                                 color_discrete_map=color_canal,
                                 opacity=0.6,
-                                hover_data={'Cantidad_Vendida': ':.0f', 'Margen': ':.2f'}
+                                hover_data={'Cantidad_Vendida': ':.0f', 'Ganancia_Neta_Total': ':.2f'}
                             )
                             fig_rating_rev.update_layout(height=400)
                             st.plotly_chart(fig_rating_rev, use_container_width=True)
@@ -452,14 +453,14 @@ if st.session_state.get('inventario_file') is not None and st.session_state.get(
                             st.plotly_chart(fig_nps_rev, use_container_width=True)
                         
                         with col2:
-                            # Costo vs Margen
+                            # Costo vs Ganancia Real
                             fig_costo_margen = px.scatter(
                                 df_dash,
                                 x='Costo_Envio',
-                                y='Margen',
+                                y='Ganancia_Neta_Total',
                                 color='Estado_Envio',
-                                title='💳 Costo Envío vs Margen',
-                                labels={'Costo_Envio': 'Costo Envío ($)', 'Margen': 'Margen ($)'},
+                                title='💳 Costo Envío vs Ganancia Real',
+                                labels={'Costo_Envio': 'Costo Envío ($)', 'Ganancia_Neta_Total': 'Ganancia Real ($)'},
                                 color_discrete_map=color_estado,
                                 opacity=0.6,
                                 size='Cantidad_Vendida'
@@ -479,7 +480,7 @@ if st.session_state.get('inventario_file') is not None and st.session_state.get(
                         with col1:
                             cat_analysis = df_dash.groupby('Categoria').agg({
                                 'Revenue': 'sum',
-                                'Margen': 'sum',
+                                'Ganancia_Neta_Total': 'sum',
                                 'Cantidad_Vendida': 'sum',
                                 'Rating_Producto': 'mean'
                             }).sort_values('Revenue', ascending=False)
@@ -500,12 +501,12 @@ if st.session_state.get('inventario_file') is not None and st.session_state.get(
                         with col2:
                             fig_cat_margen = px.bar(
                                 x=cat_analysis.index,
-                                y=cat_analysis['Margen'],
-                                title='📈 Ganancia por Categoría',
-                                labels={'x': 'Categoría', 'y': 'Ganancia ($)'},
-                                color=cat_analysis['Margen'],
+                                y=cat_analysis['Ganancia_Neta_Total'],
+                                title='📈 Ganancia Real por Categoría',
+                                labels={'x': 'Categoría', 'y': 'Ganancia Real ($)'},
+                                color=cat_analysis['Ganancia_Neta_Total'],
                                 color_continuous_scale='Greens',
-                                text=cat_analysis['Margen'].round(0)
+                                text=cat_analysis['Ganancia_Neta_Total'].round(0)
                             )
                             fig_cat_margen.update_traces(textposition='auto')
                             fig_cat_margen.update_layout(height=400, showlegend=False, xaxis_tickangle=-45)
@@ -528,15 +529,15 @@ if st.session_state.get('inventario_file') is not None and st.session_state.get(
                             st.plotly_chart(fig_cat_rating, use_container_width=True)
                         
                         with col2:
-                            cat_margen_pct = (cat_analysis['Margen'] / cat_analysis['Revenue'] * 100).sort_values(ascending=False)
+                            margen_real_cat = df_dash.groupby('Categoria')['Margen_Real_Pct'].mean().sort_values(ascending=False)
                             fig_cat_margen_pct = px.bar(
-                                x=cat_margen_pct.index,
-                                y=cat_margen_pct.values,
-                                title='📊 Margen % por Categoría',
-                                labels={'x': 'Categoría', 'y': 'Margen %'},
-                                color=cat_margen_pct.values,
+                                x=margen_real_cat.index,
+                                y=margen_real_cat.values,
+                                title='📊 Margen Real % por Categoría',
+                                labels={'x': 'Categoría', 'y': 'Margen Real %'},
+                                color=margen_real_cat.values,
                                 color_continuous_scale='RdYlGn',
-                                text=cat_margen_pct.round(1)
+                                text=margen_real_cat.round(1)
                             )
                             fig_cat_margen_pct.update_traces(textposition='auto')
                             fig_cat_margen_pct.update_layout(height=400, showlegend=False, xaxis_tickangle=-45)
@@ -608,14 +609,14 @@ if st.session_state.get('inventario_file') is not None and st.session_state.get(
                             st.plotly_chart(fig_canal_costo, use_container_width=True)
                         
                         with col2:
-                            canal_margen = df_dash.groupby('Canal_Venta')['Margen'].mean().sort_values(ascending=False)
+                            canal_margen = df_dash.groupby('Canal_Venta')['Margen_Real_Pct'].mean().sort_values(ascending=False)
                             fig_canal_margen = px.bar(
                                 x=canal_margen.index,
                                 y=canal_margen.values,
-                                title='📊 Margen Promedio por Canal',
-                                labels={'x': 'Canal', 'y': 'Margen Promedio ($)'},
+                                title='📊 Margen Real Promedio por Canal (%)',
+                                labels={'x': 'Canal', 'y': 'Margen Real Promedio (%)'},
                                 color=canal_margen.values,
-                                color_continuous_scale='Greens',
+                                color_continuous_scale='RdYlGn',
                                 text=canal_margen.round(2)
                             )
                             fig_canal_margen.update_traces(textposition='auto')
@@ -741,8 +742,9 @@ if st.session_state.get('inventario_file') is not None and st.session_state.get(
                         
                         with col2:
                             # Timeline Ganancia Acumulada
-                            timeline_gan = df_dash.groupby(df_dash['Fecha_Venta'].dt.date)['Margen'].sum().reset_index()
-                            timeline_gan['Ganancia_Acumulada'] = timeline_gan['Margen'].cumsum()
+                            timeline_gan = df_dash.groupby(df_dash['Fecha_Venta'].dt.date)['Ganancia_Neta_Total'].sum().reset_index()
+                            timeline_gan.columns = ['Fecha_Venta', 'Ganancia_Diaria']
+                            timeline_gan['Ganancia_Acumulada'] = timeline_gan['Ganancia_Diaria'].cumsum()
                             
                             fig_timeline_gan = px.line(
                                 timeline_gan,
@@ -915,57 +917,57 @@ if st.session_state.get('inventario_file') is not None and st.session_state.get(
                         st.subheader("📊 KPIs por Canal de Venta")
                         canal_kpis = df_dash.groupby('Canal_Venta').agg({
                             'Revenue': 'sum',
-                            'Margen': 'sum',
+                            'Ganancia_Neta_Total': 'sum',
                             'Cantidad_Vendida': 'sum',
                             'Rating_Producto': 'mean',
-                            'Satisfaccion_NPS': 'mean'
+                            'Satisfaccion_NPS': 'mean',
+                            'Margen_Real_Pct': 'mean'
                         }).round(2)
-                        canal_kpis['Margen_Pct'] = (canal_kpis['Margen'] / canal_kpis['Revenue'] * 100).round(1)
                         canal_kpis = canal_kpis.rename(columns={
                             'Revenue': '💰 Revenue',
-                            'Margen': '💵 Ganancia',
+                            'Ganancia_Neta_Total': '💵 Ganancia',
                             'Cantidad_Vendida': '📦 Cantidad',
                             'Rating_Producto': '⭐ Rating',
                             'Satisfaccion_NPS': '📊 NPS',
-                            'Margen_Pct': '📈 Margen %'
+                            'Margen_Real_Pct': '📈 Margen %'
                         })
                         st.dataframe(canal_kpis, use_container_width=True)
                         
                         st.subheader("📊 Top KPIs por Categoría")
                         cat_kpis = df_dash.groupby('Categoria').agg({
                             'Revenue': 'sum',
-                            'Margen': 'sum',
+                            'Ganancia_Neta_Total': 'sum',
                             'Cantidad_Vendida': 'sum',
                             'Rating_Producto': 'mean',
-                            'Satisfaccion_NPS': 'mean'
+                            'Satisfaccion_NPS': 'mean',
+                            'Margen_Real_Pct': 'mean'
                         }).round(2).sort_values('Revenue', ascending=False).head(10)
-                        cat_kpis['Margen_Pct'] = (cat_kpis['Margen'] / cat_kpis['Revenue'] * 100).round(1)
                         cat_kpis = cat_kpis.rename(columns={
                             'Revenue': '💰 Revenue',
-                            'Margen': '💵 Ganancia',
+                            'Ganancia_Neta_Total': '💵 Ganancia',
                             'Cantidad_Vendida': '📦 Cantidad',
                             'Rating_Producto': '⭐ Rating',
                             'Satisfaccion_NPS': '📊 NPS',
-                            'Margen_Pct': '📈 Margen %'
+                            'Margen_Real_Pct': '📈 Margen %'
                         })
                         st.dataframe(cat_kpis, use_container_width=True)
                         
                         st.subheader("📊 Top KPIs por Ciudad")
                         ciudad_kpis = df_dash.groupby('Ciudad_Destino').agg({
                             'Revenue': 'sum',
-                            'Margen': 'sum',
+                            'Ganancia_Neta_Total': 'sum',
                             'Cantidad_Vendida': 'sum',
                             'Rating_Producto': 'mean',
-                            'Satisfaccion_NPS': 'mean'
+                            'Satisfaccion_NPS': 'mean',
+                            'Margen_Real_Pct': 'mean'
                         }).round(2).sort_values('Revenue', ascending=False).head(10)
-                        ciudad_kpis['Margen_Pct'] = (ciudad_kpis['Margen'] / ciudad_kpis['Revenue'] * 100).round(1)
                         ciudad_kpis = ciudad_kpis.rename(columns={
                             'Revenue': '💰 Revenue',
-                            'Margen': '💵 Ganancia',
+                            'Ganancia_Neta_Total': '💵 Ganancia',
                             'Cantidad_Vendida': '📦 Cantidad',
                             'Rating_Producto': '⭐ Rating',
                             'Satisfaccion_NPS': '📊 NPS',
-                            'Margen_Pct': '📈 Margen %'
+                            'Margen_Real_Pct': '📈 Margen %'
                         })
                         st.dataframe(ciudad_kpis, use_container_width=True)
                         
@@ -980,10 +982,196 @@ if st.session_state.get('inventario_file') is not None and st.session_state.get(
                             mime="text/csv"
                         )
                         
-                        # ==========================================
-                        # ANÁLISIS CON IA - GROQ
-                        # ==========================================
                         st.markdown("---")
+                        st.header("🎯 ANÁLISIS DE NUEVAS MÉTRICAS")
+                        
+                        # ==========================================
+                        # ANÁLISIS CON NUEVAS MÉTRICAS
+                        # ==========================================
+                        st.markdown("### 11️⃣ Análisis de Ganancia Real & Satisfacción")
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            # Scatter: Ganancia_Neta_Total vs Rating_Servicio
+                            fig_gan_rating = px.scatter(
+                                df_dash,
+                                x='Rating_Servicio',
+                                y='Ganancia_Neta_Total',
+                                color='Categoria',
+                                size='Cantidad_Vendida',
+                                title='💎 Ganancia Real vs Rating de Servicio',
+                                labels={'Rating_Servicio': 'Rating Servicio', 'Ganancia_Neta_Total': 'Ganancia Neta Total ($)'},
+                                opacity=0.7,
+                                hover_data={'Ganancia_Neta_Total': ':.2f', 'Rating_Servicio': ':.2f'}
+                            )
+                            fig_gan_rating.update_layout(height=400)
+                            st.plotly_chart(fig_gan_rating, use_container_width=True)
+                        
+                        with col2:
+                            # Scatter: Rating_Servicio vs NPS
+                            fig_rating_nps = px.scatter(
+                                df_dash,
+                                x='Rating_Servicio',
+                                y='Satisfaccion_NPS',
+                                color='Canal_Venta',
+                                size='Revenue',
+                                title='⭐ Rating de Servicio vs NPS',
+                                labels={'Rating_Servicio': 'Rating Servicio', 'Satisfaccion_NPS': 'NPS Score'},
+                                color_discrete_map=color_canal,
+                                opacity=0.6
+                            )
+                            fig_rating_nps.update_layout(height=400)
+                            st.plotly_chart(fig_rating_nps, use_container_width=True)
+                        
+                        st.markdown("---")
+                        
+                        # Top 10 Productos por Ganancia_Neta_Total
+                        st.markdown("### 12️⃣ Top Productos por Ganancia Real")
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            top_gan_real = df_dash.groupby('SKU_ID').agg({
+                                'Ganancia_Neta_Total': 'sum',
+                                'Cantidad_Vendida': 'sum',
+                                'Revenue': 'sum'
+                            }).sort_values('Ganancia_Neta_Total', ascending=False).head(10)
+                            
+                            fig_top_gan = px.bar(
+                                x=top_gan_real['Ganancia_Neta_Total'].values,
+                                y=top_gan_real.index.astype(str),
+                                orientation='h',
+                                title='💰 Top 10 Productos por Ganancia Neta Real',
+                                labels={'x': 'Ganancia Neta Real ($)', 'y': 'SKU_ID'},
+                                color=top_gan_real['Ganancia_Neta_Total'].values,
+                                color_continuous_scale='Greens',
+                                text=top_gan_real['Ganancia_Neta_Total'].round(2)
+                            )
+                            fig_top_gan.update_traces(textposition='auto')
+                            fig_top_gan.update_layout(height=400, showlegend=False)
+                            st.plotly_chart(fig_top_gan, use_container_width=True)
+                        
+                        with col2:
+                            # Distribución de margen real
+                            margen_dist = df_dash[['Margen_Real_Pct', 'Categoria']].copy()
+                            fig_margen_box = px.box(
+                                margen_dist,
+                                x='Categoria',
+                                y='Margen_Real_Pct',
+                                title='📊 Distribución de Margen Real por Categoría',
+                                labels={'Margen_Real_Pct': 'Margen Real (%)', 'Categoria': 'Categoría'},
+                                color='Categoria'
+                            )
+                            fig_margen_box.update_layout(height=400, showlegend=False, xaxis_tickangle=-45)
+                            st.plotly_chart(fig_margen_box, use_container_width=True)
+                        
+                        st.markdown("---")
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            # Ganancia total acumulada por Categoría
+                            gan_cat = df_dash.groupby('Categoria').agg({
+                                'Ganancia_Neta_Total': 'sum',
+                                'Revenue': 'sum'
+                            }).sort_values('Ganancia_Neta_Total', ascending=False)
+                            gan_cat['Ganancia_Pct'] = (gan_cat['Ganancia_Neta_Total'] / gan_cat['Revenue'] * 100)
+                            
+                            fig_gan_cat = px.bar(
+                                x=gan_cat.index,
+                                y=gan_cat['Ganancia_Neta_Total'],
+                                title='💵 Ganancia Neta Total por Categoría',
+                                labels={'x': 'Categoría', 'y': 'Ganancia Neta Total ($)'},
+                                color=gan_cat['Ganancia_Neta_Total'],
+                                color_continuous_scale='RdYlGn',
+                                text=gan_cat['Ganancia_Neta_Total'].round(0)
+                            )
+                            fig_gan_cat.update_traces(textposition='auto')
+                            fig_gan_cat.update_layout(height=400, showlegend=False, xaxis_tickangle=-45)
+                            st.plotly_chart(fig_gan_cat, use_container_width=True)
+                        
+                        with col2:
+                            # Rating_Servicio promedio por Categoría
+                            rating_cat = df_dash.groupby('Categoria').agg({
+                                'Rating_Servicio': 'mean',
+                                'Ganancia_Neta_Total': 'sum'
+                            }).sort_values('Rating_Servicio', ascending=False)
+                            
+                            fig_rating_cat = px.scatter(
+                                data_frame=rating_cat.reset_index(),
+                                x='Rating_Servicio',
+                                y='Categoria',
+                                size='Ganancia_Neta_Total',
+                                color='Rating_Servicio',
+                                title='⭐ Rating Servicio Promedio por Categoría',
+                                labels={'Rating_Servicio': 'Rating Servicio', 'Categoria': 'Categoría'},
+                                color_continuous_scale='RdYlGn',
+                                size_max=50
+                            )
+                            fig_rating_cat.update_layout(height=400, showlegend=False)
+                            st.plotly_chart(fig_rating_cat, use_container_width=True)
+                        
+                        st.markdown("---")
+                        
+                        # Matriz Correlación: Margen vs Rating_Servicio por Categoría
+                        st.markdown("### 13️⃣ Análisis Cruzado - Margen vs Satisfacción")
+                        
+                        matriz_margen_rating = pd.crosstab(
+                            df_dash['Categoria'],
+                            df_dash['Canal_Venta'],
+                            values=df_dash['Rating_Servicio'],
+                            aggfunc='mean'
+                        ).fillna(0)
+                        
+                        fig_matriz_cr = px.imshow(
+                            matriz_margen_rating,
+                            title='🔥 Rating Servicio Promedio: Categoría vs Canal',
+                            color_continuous_scale='RdYlGn',
+                            labels={'x': 'Canal de Venta', 'y': 'Categoría', 'color': 'Rating Servicio'},
+                            text_auto='.2f',
+                            aspect='auto'
+                        )
+                        fig_matriz_cr.update_layout(height=350)
+                        st.plotly_chart(fig_matriz_cr, use_container_width=True)
+                        
+                        st.markdown("---")
+                        
+                        # Benchmark de Ganancia por Canal
+                        st.markdown("### 14️⃣ KPIs de Ganancia Real - Comparativa")
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            # Ganancia promedio por canal
+                            gan_canal = df_dash.groupby('Canal_Venta').agg({
+                                'Ganancia_Neta_Total': ['sum', 'mean', 'count'],
+                                'Rating_Servicio': 'mean',
+                                'Margen_Real_Pct': 'mean'
+                            }).round(2)
+                            
+                            st.dataframe(gan_canal, use_container_width=True)
+                        
+                        with col2:
+                            # Tabla de mejores SKUs por ganancia real
+                            st.subheader("🏆 Top SKUs - Rentabilidad")
+                            top_sku_gan = df_dash.groupby('SKU_ID').agg({
+                                'Ganancia_Neta_Total': 'sum',
+                                'Rating_Servicio': 'mean',
+                                'Cantidad_Vendida': 'sum',
+                                'Categoria': 'first'
+                            }).sort_values('Ganancia_Neta_Total', ascending=False).head(5)
+                            
+                            top_sku_gan = top_sku_gan.rename(columns={
+                                'Ganancia_Neta_Total': '💰 Ganancia Real',
+                                'Rating_Servicio': '⭐ Rating Servicio',
+                                'Cantidad_Vendida': '📦 Cantidad',
+                                'Categoria': '🏷️ Categoría'
+                            })
+                            st.dataframe(top_sku_gan, use_container_width=True)
+                        
+                        st.markdown("---")
+                        
                         st.markdown("""
                         <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
                                     padding: 2rem; 
@@ -1072,8 +1260,8 @@ Fecha de Análisis: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}
 
 📊 MÉTRICAS FINANCIERAS:
 - Revenue Total: ${df_dash['Revenue'].sum():,.2f}
-- Ganancia Neta: ${df_dash['Margen'].sum():,.2f}
-- Margen de Ganancia: {(df_dash['Margen'].sum()/df_dash['Revenue'].sum()*100):.1f}%
+- Ganancia Neta Total: ${df_dash['Ganancia_Neta_Total'].sum():,.2f}
+- Margen Real Promedio: {df_dash['Margen_Real_Pct'].mean():.1f}%
 - AOV (Average Order Value): ${df_dash['Revenue'].mean():,.2f}
 
 📦 ANÁLISIS DE INVENTARIO:
