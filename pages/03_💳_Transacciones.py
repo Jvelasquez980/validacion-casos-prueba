@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 from utils.data_loader import display_dataframe_info, load_csv_file
 from utils.session_init import init_session_state
 from utils.data_cleaning import limpiar_transacciones, generar_audit_summary, calcular_health_score, contar_valores_invalidos
@@ -112,6 +114,484 @@ if st.session_state.get('transacciones_file') is not None:
                         st.metric("Reducción de Nulos", f"{pct_mejora_nulos:.1f}%")
                     with col5:
                         st.metric("Valores Inválidos Eliminados", f"{audit['valores_invalidos_antes']} → {audit['valores_invalidos_despues']}")
+                    
+                    st.markdown("---")
+                    
+                    # ========== GRÁFICAS DE ANÁLISIS ==========
+                    st.markdown("### 📊 Análisis de Transacciones - Gráficas")
+                    
+                    col1, col2 = st.columns(2)
+                    
+                    # Gráfica 1: Cantidad de transacciones por cantidad vendida
+                    with col1:
+                        st.markdown("#### 📦 Transacciones por Cantidad Vendida")
+                        cantidad_dist = df_limpio['Cantidad_Vendida'].value_counts().sort_index().reset_index()
+                        cantidad_dist.columns = ['Cantidad_Vendida', 'Num_Transacciones']
+                        
+                        fig_cantidad = px.bar(
+                            cantidad_dist,
+                            x='Cantidad_Vendida',
+                            y='Num_Transacciones',
+                            color='Num_Transacciones',
+                            color_continuous_scale='Viridis',
+                            text='Num_Transacciones',
+                            title="Cantidad de Transacciones por Cantidad Vendida"
+                        )
+                        fig_cantidad.update_layout(
+                            height=400,
+                            xaxis_title="Cantidad Vendida (unidades)",
+                            yaxis_title="Número de Transacciones",
+                            hovermode='x unified',
+                            showlegend=False
+                        )
+                        fig_cantidad.update_traces(textposition='auto')
+                        st.plotly_chart(fig_cantidad, use_container_width=True)
+                    
+                    # Gráfica 2: Cantidad de transacciones por estado de envío
+                    with col2:
+                        st.markdown("#### 🚚 Cantidad de Transacciones por Estado de Envío")
+                        estado_dist = df_limpio['Estado_Envio'].value_counts().reset_index()
+                        estado_dist.columns = ['Estado_Envio', 'Cantidad']
+                        
+                        color_map_estado = {'Entregado': '#2ecc71', 'En_Transito': '#3498db', 'Perdido': '#e74c3c', 'Retrasado': '#f39c12'}
+                        
+                        fig_estado = px.bar(
+                            estado_dist,
+                            x='Estado_Envio',
+                            y='Cantidad',
+                            color='Estado_Envio',
+                            color_discrete_map=color_map_estado,
+                            text='Cantidad',
+                            title="Transacciones por Estado de Envío"
+                        )
+                        fig_estado.update_layout(
+                            height=400,
+                            xaxis_title="Estado de Envío",
+                            yaxis_title="Cantidad de Transacciones",
+                            hovermode='x unified',
+                            showlegend=False
+                        )
+                        fig_estado.update_traces(textposition='auto')
+                        st.plotly_chart(fig_estado, use_container_width=True)
+                    
+                    col3, col4 = st.columns(2)
+                    
+                    # Gráfica 3: Histograma de costo de envío
+                    with col3:
+                        st.markdown("#### 💰 Distribución del Costo de Envío")
+                        
+                        fig_costo_hist = px.histogram(
+                            df_limpio,
+                            x='Costo_Envio',
+                            nbins=30,
+                            color_discrete_sequence=['#3498db'],
+                            title="Distribución del Costo de Envío",
+                            labels={'Costo_Envio': 'Costo Envío (USD)', 'count': 'Frecuencia'}
+                        )
+                        fig_costo_hist.update_layout(
+                            height=400,
+                            showlegend=False,
+                            bargap=0.1
+                        )
+                        st.plotly_chart(fig_costo_hist, use_container_width=True)
+                        
+                        # Mostrar estadísticas
+                        costo_stats_col1, costo_stats_col2, costo_stats_col3 = st.columns(3)
+                        with costo_stats_col1:
+                            st.metric("Costo Promedio", f"${df_limpio['Costo_Envio'].mean():.2f}")
+                        with costo_stats_col2:
+                            st.metric("Costo Máximo", f"${df_limpio['Costo_Envio'].max():.2f}")
+                        with costo_stats_col3:
+                            st.metric("Costo Mínimo", f"${df_limpio['Costo_Envio'].min():.2f}")
+                    
+                    # Gráfica 4: Costo promedio de envío por ciudad destino
+                    with col4:
+                        st.markdown("#### 🏙️ Costo Promedio de Envío por Ciudad Destino")
+                        costo_ciudad = df_limpio.groupby('Ciudad_Destino')['Costo_Envio'].mean().sort_values(ascending=False).reset_index()
+                        costo_ciudad.columns = ['Ciudad_Destino', 'Costo_Promedio']
+                        
+                        fig_costo_ciudad = px.bar(
+                            costo_ciudad,
+                            x='Ciudad_Destino',
+                            y='Costo_Promedio',
+                            color='Costo_Promedio',
+                            color_continuous_scale='RdYlGn_r',
+                            text=costo_ciudad['Costo_Promedio'].apply(lambda x: f'${x:.2f}'),
+                            title="Costo Promedio de Envío por Ciudad"
+                        )
+                        fig_costo_ciudad.update_layout(
+                            height=400,
+                            xaxis_title="Ciudad Destino",
+                            yaxis_title="Costo Promedio (USD)",
+                            hovermode='x unified',
+                            showlegend=False,
+                            xaxis_tickangle=-45
+                        )
+                        fig_costo_ciudad.update_traces(textposition='auto')
+                        st.plotly_chart(fig_costo_ciudad, use_container_width=True)
+                    
+                    col5, col6 = st.columns(2)
+                    
+                    # Gráfica 5: Costo promedio de envío por canal de venta
+                    with col5:
+                        st.markdown("#### 📱 Costo Promedio de Envío por Canal de Venta")
+                        costo_canal = df_limpio.groupby('Canal_Venta')['Costo_Envio'].mean().sort_values(ascending=False).reset_index()
+                        costo_canal.columns = ['Canal_Venta', 'Costo_Promedio']
+                        
+                        fig_costo_canal = px.bar(
+                            costo_canal,
+                            x='Canal_Venta',
+                            y='Costo_Promedio',
+                            color='Costo_Promedio',
+                            color_continuous_scale='Plasma',
+                            text=costo_canal['Costo_Promedio'].apply(lambda x: f'${x:.2f}'),
+                            title="Costo Promedio de Envío por Canal"
+                        )
+                        fig_costo_canal.update_layout(
+                            height=400,
+                            xaxis_title="Canal de Venta",
+                            yaxis_title="Costo Promedio (USD)",
+                            hovermode='x unified',
+                            showlegend=False
+                        )
+                        fig_costo_canal.update_traces(textposition='auto')
+                        st.plotly_chart(fig_costo_canal, use_container_width=True)
+                    
+                    # Gráfica 6: Top SKUs por cantidad vendida
+                    with col6:
+                        st.markdown("#### 🏆 Top 15 SKUs por Cantidad Vendida")
+                        top_skus = df_limpio.groupby('SKU_ID')['Cantidad_Vendida'].sum().sort_values(ascending=False).head(15).reset_index()
+                        
+                        fig_top_skus = px.bar(
+                            top_skus,
+                            x='SKU_ID',
+                            y='Cantidad_Vendida',
+                            color='Cantidad_Vendida',
+                            color_continuous_scale='Blues',
+                            text='Cantidad_Vendida',
+                            title="Top 15 SKUs por Cantidad Vendida"
+                        )
+                        fig_top_skus.update_layout(
+                            height=400,
+                            xaxis_title="SKU ID",
+                            yaxis_title="Cantidad Vendida Total",
+                            hovermode='x unified',
+                            showlegend=False,
+                            xaxis_tickangle=-45
+                        )
+                        fig_top_skus.update_traces(textposition='auto')
+                        st.plotly_chart(fig_top_skus, use_container_width=True)
+                    
+                    st.markdown("---")
+                    
+                    # ========== GRÁFICAS ADICIONALES AVANZADAS ==========
+                    st.markdown("### 📈 Análisis Avanzado de Transacciones")
+                    
+                    col7, col8 = st.columns(2)
+                    
+                    # Gráfica 7: Scatter - Precio Final vs Cantidad Vendida
+                    with col7:
+                        st.markdown("#### 💎 Correlación: Precio Final vs Cantidad Vendida")
+                        
+                        fig_scatter_precio = px.scatter(
+                            df_limpio,
+                            x='Cantidad_Vendida',
+                            y='Precio_Venta_Final',
+                            color='Canal_Venta',
+                            size='Costo_Envio',
+                            hover_name='Transaccion_ID',
+                            hover_data={'Cantidad_Vendida': True, 'Precio_Venta_Final': ':.2f', 'Canal_Venta': True},
+                            title="Precio Final vs Cantidad Vendida",
+                            labels={'Cantidad_Vendida': 'Cantidad Vendida (unidades)', 'Precio_Venta_Final': 'Precio Final (USD)'},
+                            color_discrete_map={'Físico': '#3498db', 'Online': '#e74c3c'}
+                        )
+                        fig_scatter_precio.update_layout(
+                            height=400,
+                            hovermode='closest',
+                            plot_bgcolor='rgba(240,240,240,0.5)'
+                        )
+                        st.plotly_chart(fig_scatter_precio, use_container_width=True)
+                    
+                    # Gráfica 8: Box Plot - Tiempo de Entrega por Estado
+                    with col8:
+                        st.markdown("#### ⏱️ Tiempo de Entrega por Estado de Envío")
+                        
+                        fig_box_tiempo = px.box(
+                            df_limpio,
+                            x='Estado_Envio',
+                            y='Tiempo_Entrega_Real',
+                            color='Estado_Envio',
+                            title="Distribución de Tiempo de Entrega por Estado",
+                            labels={'Tiempo_Entrega_Real': 'Días', 'Estado_Envio': 'Estado de Envío'},
+                            color_discrete_map={'Entregado': '#2ecc71', 'En_Transito': '#3498db', 'Perdido': '#e74c3c', 'Retrasado': '#f39c12'}
+                        )
+                        fig_box_tiempo.update_layout(
+                            height=400,
+                            showlegend=False
+                        )
+                        st.plotly_chart(fig_box_tiempo, use_container_width=True)
+                    
+                    col9, col10 = st.columns(2)
+                    
+                    # Gráfica 9: Scatter - Costo Envío vs Tiempo de Entrega
+                    with col9:
+                        st.markdown("#### ⚡ Costo de Envío vs Tiempo de Entrega")
+                        
+                        fig_scatter_costo_tiempo = px.scatter(
+                            df_limpio,
+                            x='Costo_Envio',
+                            y='Tiempo_Entrega_Real',
+                            color='Estado_Envio',
+                            size='Cantidad_Vendida',
+                            hover_name='Transaccion_ID',
+                            hover_data={'Costo_Envio': ':.2f', 'Tiempo_Entrega_Real': True, 'Estado_Envio': True},
+                            title="Costo Envío vs Tiempo de Entrega",
+                            labels={'Costo_Envio': 'Costo (USD)', 'Tiempo_Entrega_Real': 'Tiempo (días)'},
+                            color_discrete_map={'Entregado': '#2ecc71', 'En_Transito': '#3498db', 'Perdido': '#e74c3c', 'Retrasado': '#f39c12'}
+                        )
+                        fig_scatter_costo_tiempo.update_layout(
+                            height=400,
+                            hovermode='closest',
+                            plot_bgcolor='rgba(240,240,240,0.5)'
+                        )
+                        st.plotly_chart(fig_scatter_costo_tiempo, use_container_width=True)
+                    
+                    # Gráfica 10: Histograma - Distribución de Tiempo de Entrega
+                    with col10:
+                        st.markdown("#### 📅 Distribución de Tiempo de Entrega Real")
+                        
+                        fig_hist_tiempo = px.histogram(
+                            df_limpio,
+                            x='Tiempo_Entrega_Real',
+                            nbins=25,
+                            color_discrete_sequence=['#9b59b6'],
+                            title="Distribución de Tiempo de Entrega",
+                            labels={'Tiempo_Entrega_Real': 'Días de Entrega', 'count': 'Frecuencia'}
+                        )
+                        fig_hist_tiempo.update_layout(
+                            height=400,
+                            showlegend=False,
+                            bargap=0.1
+                        )
+                        st.plotly_chart(fig_hist_tiempo, use_container_width=True)
+                        
+                        # Estadísticas de tiempo
+                        tiempo_stats_col1, tiempo_stats_col2, tiempo_stats_col3 = st.columns(3)
+                        with tiempo_stats_col1:
+                            st.metric("Tiempo Promedio", f"{df_limpio['Tiempo_Entrega_Real'].mean():.1f} días")
+                        with tiempo_stats_col2:
+                            st.metric("Tiempo Máximo", f"{df_limpio['Tiempo_Entrega_Real'].max():.0f} días")
+                        with tiempo_stats_col3:
+                            st.metric("Tiempo Mínimo", f"{df_limpio['Tiempo_Entrega_Real'].min():.0f} días")
+                    
+                    st.markdown("---")
+                    col11, col12 = st.columns(2)
+                    
+                    # Gráfica 11: Heatmap - Estado Envío vs Canal de Venta
+                    with col11:
+                        st.markdown("#### 🔥 Matriz: Estado de Envío vs Canal de Venta")
+                        
+                        crosstab_estado_canal = pd.crosstab(
+                            df_limpio['Estado_Envio'].astype(str),
+                            df_limpio['Canal_Venta'].astype(str)
+                        )
+                        
+                        fig_heatmap_estado = px.imshow(
+                            crosstab_estado_canal,
+                            labels=dict(x="Canal de Venta", y="Estado de Envío", color="Cantidad"),
+                            color_continuous_scale='YlGnBu',
+                            title="Matriz: Estado de Envío vs Canal de Venta",
+                            text_auto=True,
+                            aspect='auto'
+                        )
+                        fig_heatmap_estado.update_layout(height=400)
+                        st.plotly_chart(fig_heatmap_estado, use_container_width=True)
+                    
+                    # Gráfica 12: Gráfico de Línea - Transacciones por Fecha
+                    with col12:
+                        st.markdown("#### 📊 Tendencia de Transacciones por Fecha")
+                        
+                        df_limpio['Fecha_Venta'] = pd.to_datetime(df_limpio['Fecha_Venta'])
+                        transacciones_fecha = df_limpio.groupby(df_limpio['Fecha_Venta'].dt.date).size().reset_index(name='Cantidad')
+                        transacciones_fecha.columns = ['Fecha', 'Cantidad']
+                        
+                        fig_timeline = px.line(
+                            transacciones_fecha,
+                            x='Fecha',
+                            y='Cantidad',
+                            title="Tendencia de Transacciones en el Tiempo",
+                            labels={'Fecha': 'Fecha de Venta', 'Cantidad': 'Número de Transacciones'},
+                            markers=True
+                        )
+                        fig_timeline.update_layout(
+                            height=400,
+                            hovermode='x unified'
+                        )
+                        fig_timeline.update_traces(line=dict(color='#3498db', width=2))
+                        st.plotly_chart(fig_timeline, use_container_width=True)
+                    
+                    st.markdown("---")
+                    col13, col14 = st.columns(2)
+                    
+                    # Gráfica 13: Scatter - Cantidad Vendida vs Costo Envío
+                    with col13:
+                        st.markdown("#### 📦 Cantidad Vendida vs Costo de Envío")
+                        
+                        fig_scatter_cantidad_costo = px.scatter(
+                            df_limpio,
+                            x='Cantidad_Vendida',
+                            y='Costo_Envio',
+                            color='Estado_Envio',
+                            size='Tiempo_Entrega_Real',
+                            hover_name='Transaccion_ID',
+                            hover_data={'Cantidad_Vendida': True, 'Costo_Envio': ':.2f', 'Estado_Envio': True},
+                            title="Cantidad Vendida vs Costo de Envío",
+                            labels={'Cantidad_Vendida': 'Cantidad (unidades)', 'Costo_Envio': 'Costo (USD)'},
+                            color_discrete_map={'Entregado': '#2ecc71', 'En_Transito': '#3498db', 'Perdido': '#e74c3c', 'Retrasado': '#f39c12'}
+                        )
+                        fig_scatter_cantidad_costo.update_layout(
+                            height=400,
+                            hovermode='closest',
+                            plot_bgcolor='rgba(240,240,240,0.5)'
+                        )
+                        st.plotly_chart(fig_scatter_cantidad_costo, use_container_width=True)
+                    
+                    # Gráfica 14: Pie Chart - Distribución de Ventas por Canal
+                    with col14:
+                        st.markdown("#### 🎯 Distribución de Ventas por Canal")
+                        
+                        canal_dist = df_limpio['Canal_Venta'].value_counts().reset_index()
+                        canal_dist.columns = ['Canal_Venta', 'Cantidad']
+                        
+                        fig_pie_canal = px.pie(
+                            canal_dist,
+                            names='Canal_Venta',
+                            values='Cantidad',
+                            title="Distribución de Transacciones por Canal",
+                            color_discrete_map={'Físico': '#3498db', 'Online': '#e74c3c'},
+                            hole=0.3
+                        )
+                        fig_pie_canal.update_traces(
+                            textposition='inside',
+                            textinfo='label+percent',
+                            hovertemplate='<b>%{label}</b><br>Transacciones: %{value}<br>Porcentaje: %{percent}<extra></extra>'
+                        )
+                        fig_pie_canal.update_layout(height=400)
+                        st.plotly_chart(fig_pie_canal, use_container_width=True)
+                    
+                    st.markdown("---")
+                    
+                    # Gráfica 15: Box Plot - Precio por Canal de Venta
+                    st.markdown("#### 💰 Precio de Venta por Canal de Venta")
+                    
+                    fig_box_precio = px.box(
+                        df_limpio,
+                        x='Canal_Venta',
+                        y='Precio_Venta_Final',
+                        color='Canal_Venta',
+                        title="Distribución de Precios de Venta por Canal",
+                        labels={'Precio_Venta_Final': 'Precio (USD)', 'Canal_Venta': 'Canal de Venta'},
+                        color_discrete_map={'Físico': '#3498db', 'Online': '#e74c3c'}
+                    )
+                    fig_box_precio.update_layout(
+                        height=400,
+                        showlegend=False
+                    )
+                    st.plotly_chart(fig_box_precio, use_container_width=True)
+                    
+                    st.markdown("---")
+                    
+                    # Dashboard de KPIs Logísticos
+                    st.markdown("#### 📊 Dashboard de KPIs Logísticos")
+                    
+                    col_gauge1, col_gauge2, col_gauge3 = st.columns(3)
+                    
+                    with col_gauge1:
+                        # % Entregas a Tiempo (consideramos "a tiempo" los "Entregado")
+                        entregas_exitosas = len(df_limpio[df_limpio['Estado_Envio'] == 'Entregado'])
+                        total_entregas = len(df_limpio)
+                        pct_entregas_exitosas = (entregas_exitosas / total_entregas) * 100
+                        
+                        fig_gauge_entrega = go.Figure(go.Indicator(
+                            mode="gauge+number+delta",
+                            value=pct_entregas_exitosas,
+                            domain={'x': [0, 1], 'y': [0, 1]},
+                            title={'text': "% Entregas Exitosas"},
+                            delta={'reference': 80},
+                            gauge={
+                                'axis': {'range': [0, 100]},
+                                'bar': {'color': "#2ecc71"},
+                                'steps': [
+                                    {'range': [0, 50], 'color': "#e74c3c"},
+                                    {'range': [50, 75], 'color': "#f39c12"},
+                                    {'range': [75, 90], 'color': "#3498db"},
+                                    {'range': [90, 100], 'color': "#2ecc71"}
+                                ],
+                                'threshold': {
+                                    'line': {'color': "red", 'width': 4},
+                                    'thickness': 0.75,
+                                    'value': 85
+                                }
+                            }
+                        ))
+                        fig_gauge_entrega.update_layout(height=300)
+                        st.plotly_chart(fig_gauge_entrega, use_container_width=True)
+                    
+                    with col_gauge2:
+                        # Costo Promedio de Envío
+                        costo_promedio = df_limpio['Costo_Envio'].mean()
+                        
+                        fig_gauge_costo = go.Figure(go.Indicator(
+                            mode="gauge+number+delta",
+                            value=costo_promedio,
+                            domain={'x': [0, 1], 'y': [0, 1]},
+                            title={'text': "Costo Promedio Envío"},
+                            delta={'reference': 60},
+                            gauge={
+                                'axis': {'range': [0, 150]},
+                                'bar': {'color': "#e67e22"},
+                                'steps': [
+                                    {'range': [0, 40], 'color': "#2ecc71"},
+                                    {'range': [40, 80], 'color': "#f39c12"},
+                                    {'range': [80, 150], 'color': "#e74c3c"}
+                                ],
+                                'threshold': {
+                                    'line': {'color': "red", 'width': 4},
+                                    'thickness': 0.75,
+                                    'value': 100
+                                }
+                            }
+                        ))
+                        fig_gauge_costo.update_layout(height=300)
+                        st.plotly_chart(fig_gauge_costo, use_container_width=True)
+                    
+                    with col_gauge3:
+                        # Tiempo de Entrega Promedio
+                        tiempo_promedio = df_limpio['Tiempo_Entrega_Real'].mean()
+                        
+                        fig_gauge_tiempo = go.Figure(go.Indicator(
+                            mode="gauge+number+delta",
+                            value=tiempo_promedio,
+                            domain={'x': [0, 1], 'y': [0, 1]},
+                            title={'text': "Tiempo Promedio Entrega"},
+                            delta={'reference': 15},
+                            gauge={
+                                'axis': {'range': [0, 40]},
+                                'bar': {'color': "#9b59b6"},
+                                'steps': [
+                                    {'range': [0, 10], 'color': "#2ecc71"},
+                                    {'range': [10, 20], 'color': "#3498db"},
+                                    {'range': [20, 40], 'color': "#e74c3c"}
+                                ],
+                                'threshold': {
+                                    'line': {'color': "red", 'width': 4},
+                                    'thickness': 0.75,
+                                    'value': 25
+                                }
+                            }
+                        ))
+                        fig_gauge_tiempo.update_layout(height=300)
+                        st.plotly_chart(fig_gauge_tiempo, use_container_width=True)
                     
                     st.markdown("---")
                     display_dataframe_info(df_limpio)
