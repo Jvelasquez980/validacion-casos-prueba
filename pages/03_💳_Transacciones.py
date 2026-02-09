@@ -46,7 +46,6 @@ if st.session_state.get('transacciones_file') is not None:
                 
                 st.markdown("---")
                 display_dataframe_info(df)
-                
                 # Análisis adicional
                 st.subheader("Análisis Detallado")
                 col1, col2 = st.columns(2)

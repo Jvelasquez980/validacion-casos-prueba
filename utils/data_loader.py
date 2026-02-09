@@ -15,7 +15,15 @@ def display_dataframe_info(df, title="Información del Archivo"):
     st.write(df)
     
     st.subheader("Estadísticas")
-    st.write(df.describe())
+    try:
+        if 'Precio_Venta_Final' in df.columns and 'Cantidad_Vendida' in df.columns:
+            st.write(df[['Cantidad_Vendida','Precio_Venta_Final', 'Costo_Envio', 'Tiempo_Entrega_Real']].describe())
+        elif 'SKU_ID' in df.columns and 'Costo_Unitario_USD' in df.columns:
+            st.write(df[['SKU_ID','Costo_Unitario_USD', 'Punto_Reorden', 'Lead_Time_Dias']].describe())
+        else:
+                st.write(df.describe())
+    except Exception as e:
+        st.error(f"Error al calcular estadísticas: {e}")
 
 
 def load_csv_file(file_bytes):

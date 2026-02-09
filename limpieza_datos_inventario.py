@@ -119,7 +119,6 @@ def imputar_valores_columna_categoria(df, remplazo):
         # Encontramos la categoría con la medida más cercana
         categoria_asignada = min(medidas_por_categoria.keys(), 
                                 key=lambda cat: abs(medidas_por_categoria[cat] - costo_valor))
-        print(f"Reemplazando '???' en índice {idx} con categoría '{categoria_asignada}' basada en costo unitario de {costo_valor}.")
         # Reemplazamos la categoría
         df.loc[idx, 'Categoria'] = categoria_asignada
     
