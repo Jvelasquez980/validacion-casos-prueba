@@ -24,19 +24,55 @@ TechLogistics S.A.S. (Ficticio), un gigante del retail tecnológico, ha detectad
 ## 📁 Estructura del Repositorio
 
 ```
-├── datasets/
-│   ├── feedback_clientes_v2.csv               
-│   ├── inventario_central_v2.csv           
-│   └── transacciones_logistica_v2.csv
-├── src/
-│   ├── data_cleaning.py        # Módulo de limpieza
-│   ├── feature_engineering.py  # Creación de variables
-│   ├── ai_integration.py       # Integración con Groq
-│   └── utils.py                # Funciones auxiliares
-├── streamlit_app.py            # Dashboard Streamlit
-├── requirements.txt            # Dependencias
-├── hallazgos.pdf              # Documento de hallazgos
-└── README.md
+validacion-casos-prueba/
+├── 📊 data/                                    # Datasets
+│   ├── feedback_clientes_limpio.csv           # Feedback limpio
+│   ├── feedback_clientes_v2.csv               # Feedback original
+│   ├── inventario_central_limpio.csv          # Inventario limpio
+│   ├── inventario_central_v2.csv              # Inventario original
+│   ├── transaccion_completa_limpio.csv        # Transacciones limpias
+│   ├── transaccion_logistica_limpio.csv       # Logística limpia
+│   └── transacciones_logistica_v2.csv         # Logística original
+│
+├── 🛠️ utils/                                   # Módulos centralizados
+│   ├── __init__.py
+│   ├── data_cleaning.py                       # Funciones de limpieza
+│   ├── data_integration.py                    # Integración y métricas
+│   ├── data_loader.py                         # Carga de datos
+│   └── session_init.py                        # Sesiones Streamlit
+│
+├── 📄 pages/                                   # Páginas del Dashboard
+│   ├── __init__.py
+│   ├── 01_📦_Inventario.py                    # Análisis Inventario
+│   ├── 02_💬_Feedback.py                      # Análisis Feedback
+│   ├── 03_💳_Transacciones.py                 # Análisis Logística
+│   └── 04_🔗_Merge.py                         # Merge integrado con IA
+│
+├── 📓 Notebooks de Exploración
+│   ├── revision_data.ipynb                    # Exploración general
+│   ├── revision_data_feedback.ipynb           # EDA Feedback
+│   ├── revision_inventario.ipynb              # EDA Inventario
+│   └── revision_transaccion.ipynb             # EDA Transacciones
+│
+├── 🎯 Archivos de Limpieza (Legacy)
+│   ├── limpieza_datos_feedback.py             # Limpieza Feedback
+│   ├── limpieza_datos_inventario.py           # Limpieza Inventario
+│   ├── limpieza_datos_transacciones.py        # Limpieza Transacciones
+│   └── integracion_datos.py                   # Integración (refactorizado)
+│
+├── 🚀 Aplicación Principal
+│   ├── streamlit_app.py                       # App principal v1
+│   ├── streamlit_app_v2.py                    # App principal v2 (actual)
+│   ├── main.py                                # Punto de entrada
+│
+├── ⚙️ Configuración
+│   ├── requirements.txt                       # Dependencias Python
+│   ├── .env.example                           # Variables de entorno
+│   ├── FIXES_APPLIED.md                       # Registro de correcciones
+│   └── README.md                              # Este archivo
+│
+└── 🧪 Testing
+    └── test_metricas.py                       # Validación de métricas
 ```
 
 ---
