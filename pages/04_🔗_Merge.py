@@ -163,6 +163,15 @@ if st.session_state.get('inventario_file') is not None and st.session_state.get(
                         # Crear métricas nuevas
                         df_integrado = crear_metricas_nuevas(df_integrado)
                         
+                        # DEBUG: Mostrar columnas después de crear métricas
+                        st.info(f"✅ Métricas creadas. Columnas disponibles: {list(df_integrado.columns)}")
+                        
+                        # Verificar que existen las métricas críticas
+                        metricas_esperadas = ['Ganancia_Neta_Total', 'Margen_Real_Pct', 'Rating_Servicio']
+                        metricas_faltantes = [m for m in metricas_esperadas if m not in df_integrado.columns]
+                        if metricas_faltantes:
+                            st.warning(f"⚠️ Métricas faltantes: {metricas_faltantes}")
+                        
                         st.success(f"✅ Integración completada exitosamente - {len(df_integrado)} registros")
                         
                         # Mostrar health score del merge

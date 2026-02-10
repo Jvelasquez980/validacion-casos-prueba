@@ -10,7 +10,7 @@ def imputar_valores_columna_stock_actual(df,remplazo):
         valor_reemplazo = df['Stock_Actual'].mode()[0]
     else:
         raise ValueError("El parámetro 'remplazo' debe ser 'media', 'mediana' o 'moda'.")
-    df['Stock_Actual'].fillna(valor_reemplazo, inplace=True)
+    df['Stock_Actual'] = df['Stock_Actual'].fillna(valor_reemplazo)
     df['Stock_Actual'] = df['Stock_Actual'].astype(int)
     df['Stock_Actual'] = df['Stock_Actual'].abs()
     return df
@@ -127,5 +127,5 @@ def imputar_valores_columna_categoria(df, remplazo):
 def limpiezar_fecha_ultima_revision(df):
     df['Ultima_Revision'] = pd.to_datetime(df['Ultima_Revision'], errors='coerce')
     fecha_minima = df['Ultima_Revision'].min()
-    df['Ultima_Revision'].fillna(fecha_minima, inplace=True)
+    df['Ultima_Revision'] = df['Ultima_Revision'].fillna(fecha_minima)
     return df

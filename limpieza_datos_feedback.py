@@ -119,12 +119,12 @@ def imputar_valores_comentario_texto(df):
     Imputa valores faltantes en Comentario_Texto con un valor específico.
     """
     df.loc[df['Comentario_Texto'] == "---", 'Comentario_Texto'] = np.nan
-    df['Comentario_Texto'].fillna(df['Comentario_Texto'].mode()[0], inplace=True)
+    df['Comentario_Texto'] = df['Comentario_Texto'].fillna(df['Comentario_Texto'].mode()[0])
     return df
 
 def imputar_valores_recomienda_marca(df):
     """
     Imputa valores faltantes en Recomienda_Marca con la moda.
     """
-    df['Recomienda_Marca'].fillna(df['Recomienda_Marca'].mode()[0], inplace=True)
+    df['Recomienda_Marca'] = df['Recomienda_Marca'].fillna(df['Recomienda_Marca'].mode()[0])
     return df
